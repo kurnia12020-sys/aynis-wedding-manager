@@ -29,6 +29,8 @@ import {
   UserPlus,
   ShieldCheck,
   Search,
+  FileText,
+  Printer,
 } from "lucide-react";
 
 import { supabase, supabaseConfigured } from "../lib/cloud";
@@ -89,6 +91,22 @@ const parseMoney = (value) => Number(onlyDigits(value) || 0);
 const formatMoneyInput = (value) => {
   const digits = onlyDigits(value);
   return digits ? Number(digits).toLocaleString("id-ID") : "";
+};
+
+
+const escapeHtml = (value) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#039;");
+
+const normalizeWhatsApp = (phone) => {
+  const digits = onlyDigits(phone);
+  if (!digits) return "";
+  if (digits.startsWith("0")) return `62${digits.slice(1)}`;
+  if (digits.startsWith("62")) return digits;
+  return digits;
 };
 
 const formatDate = (date) => {
@@ -1756,6 +1774,8 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
   const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
   const scheduledPaid = schedule.reduce((sum, stage) => sum + (stage.paid ? Number(stage.amount || 0) : 0), 0);
   const [paymentDrafts, setPaymentDrafts] = useState({});
+  const [clientDoc, setClientDoc] = useState(null);
+  const [receiptId, setReceiptId] = useState("");
 
   useEffect(() => {
     const next = {};
@@ -1766,6 +1786,77 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
   function savePaymentStageAmount(stage) {
     const amount = parseMoney(paymentDrafts[stage.key] ?? stage.amount);
     onUpdatePaymentStage(stage.key, { amount });
+  }
+  const receiptPayments = [
+    ...schedule.filter((stage) => stage.paid).map((stage) => ({
+      id: `stage-${stage.key}`,
+      label: stage.label,
+      amount: Number(stage.amount || 0),
+      date: stage.paidDate || stage.dueDate || wedding.date || "",
+      notes: "Pembayaran sesuai jadwal",
+    })),
+    ...(wedding.payments || []).map((payment) => ({
+      id: `payment-${payment.id}`,
+      label: payment.label || payment.note || "Pembayaran Klien",
+      amount: Number(payment.amount || 0),
+      date: payment.date || wedding.date || "",
+      notes: payment.notes || "",
+    })),
+  ].filter((payment) => payment.amount > 0);
+
+  const selectedReceipt = receiptPayments.find((payment) => payment.id === receiptId) || receiptPayments[receiptPayments.length - 1] || null;
+
+  function openClientDocument(type) {
+    if (type === "receipt" && receiptPayments.length === 0) {
+      alert("Belum ada pembayaran yang dapat dibuatkan kwitansi.");
+      return;
+    }
+    if (type === "receipt" && !receiptId && receiptPayments.length > 0) setReceiptId(receiptPayments[receiptPayments.length - 1].id);
+    setClientDoc(type);
+  }
+
+  function clientDocumentHtml(type, payment = selectedReceipt) {
+    const isInvoice = type === "invoice";
+    const docTitle = isInvoice ? "INVOICE TAGIHAN" : "KWITANSI PEMBAYARAN";
+    const docNo = `${isInvoice ? "INV" : "KWT"}-${String(wedding.id || "AYNIS").slice(-6).toUpperCase()}-${new Date().getFullYear()}`;
+    const addOnRows = (wedding.addOns || []).map((item) => {
+      const qty = Math.max(Number(item.qty || 1), 1);
+      const total = qty * Number(item.price || 0);
+      return `<tr><td>${escapeHtml(item.name)}</td><td>${qty}×</td><td class="right">${escapeHtml(rp(total))}</td></tr>`;
+    }).join("");
+    const paymentRows = isInvoice ? (wedding.payments || []).map((item) => `<tr><td>${escapeHtml(item.label || item.note || "Pembayaran")}</td><td>${escapeHtml(item.date ? formatDate(item.date) : "-")}</td><td class="right">${escapeHtml(rp(item.amount))}</td></tr>`).join("") : "";
+    const body = isInvoice ? `
+      <section><h3>Rincian Tagihan</h3><table><tr><td>Paket ${escapeHtml(wedding.packageName || "-")}</td><td></td><td class="right">${escapeHtml(rp(f.deal))}</td></tr>${f.discount > 0 ? `<tr><td>Cashback / Potongan</td><td></td><td class="right">- ${escapeHtml(rp(f.discount))}</td></tr>` : ""}${addOnRows}<tr class="total"><td>Total Tagihan</td><td></td><td class="right">${escapeHtml(rp(f.netDeal))}</td></tr><tr><td>Sudah Dibayar</td><td></td><td class="right">${escapeHtml(rp(f.incoming))}</td></tr><tr class="due"><td>Sisa Tagihan</td><td></td><td class="right">${escapeHtml(rp(f.remaining))}</td></tr></table></section>
+      ${paymentRows ? `<section><h3>Riwayat Pembayaran</h3><table><thead><tr><th>Pembayaran</th><th>Tanggal</th><th class="right">Nominal</th></tr></thead><tbody>${paymentRows}</tbody></table></section>` : ""}
+    ` : `
+      <section class="receiptAmount"><span>Telah diterima dari</span><h2>${escapeHtml(wedding.couple)}</h2><p>Sejumlah</p><strong>${escapeHtml(rp(payment?.amount || 0))}</strong><p>Untuk pembayaran: <b>${escapeHtml(payment?.label || "Pembayaran Wedding")}</b></p>${payment?.notes ? `<p>Catatan: ${escapeHtml(payment.notes)}</p>` : ""}</section>
+    `;
+    return `<!doctype html><html><head><meta charset="utf-8"><title>${docTitle}</title><style>
+      *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#2b241f;margin:0;background:#f6f1ec}.sheet{width:210mm;min-height:297mm;margin:auto;background:#fff;padding:18mm}.brand{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid #9b6b4b;padding-bottom:16px}.brand h1{font-family:Georgia,serif;margin:0;font-size:27px}.brand p,.muted{color:#76685d}.docmeta{text-align:right}.docmeta b{display:block;font-size:20px;color:#9b6b4b}.client{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:24px 0;background:#faf5f1;border-radius:12px;padding:16px}.client div{display:grid;gap:5px}small{color:#98775f;text-transform:uppercase;letter-spacing:.08em;font-weight:700}h3{margin-top:28px}table{width:100%;border-collapse:collapse}td,th{padding:11px 8px;border-bottom:1px solid #e9ddd3;text-align:left}.right{text-align:right}.total td{font-weight:700;border-top:2px solid #cdb39e}.due td{font-weight:800;color:#8b5433;font-size:18px}.receiptAmount{text-align:center;padding:42px 10px}.receiptAmount strong{display:block;font-size:34px;color:#8b5433;margin:16px}.footer{margin-top:50px;display:flex;justify-content:space-between;gap:30px}.sign{text-align:center;min-width:180px}.sign .line{border-top:1px solid #333;margin-top:55px;padding-top:7px}@media print{body{background:#fff}.sheet{margin:0;box-shadow:none}@page{size:A4;margin:0}}
+    </style></head><body><main class="sheet"><header class="brand"><div><h1>AYNIS ANIS MAKEUP</h1><p>Wedding & Makeup Service</p></div><div class="docmeta"><b>${docTitle}</b><span>${escapeHtml(docNo)}</span><p>${escapeHtml(new Date().toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"}))}</p></div></header><section class="client"><div><small>Nama Pengantin</small><b>${escapeHtml(wedding.couple)}</b></div><div><small>Tanggal Wedding</small><b>${escapeHtml(formatDate(wedding.date))}</b></div><div><small>Lokasi</small><b>${escapeHtml(wedding.place || "-")}</b></div><div><small>WhatsApp</small><b>${escapeHtml(wedding.whatsapp || "-")}</b></div></section>${body}<footer class="footer"><div><p class="muted">Terima kasih telah mempercayakan momen spesial Anda kepada AYNIS ANIS MAKEUP.</p></div><div class="sign"><span>Hormat kami,</span><div class="line">AYNIS ANIS MAKEUP</div></div></footer></main></body></html>`;
+  }
+
+  function printClientDocument(type) {
+    const payment = type === "receipt" ? selectedReceipt : null;
+    if (type === "receipt" && !payment) return alert("Pilih pembayaran terlebih dahulu.");
+    const popup = window.open("", "_blank", "width=900,height=900");
+    if (!popup) return alert("Izinkan pop-up browser untuk mencetak dokumen.");
+    popup.document.open();
+    popup.document.write(clientDocumentHtml(type, payment));
+    popup.document.close();
+    popup.focus();
+    setTimeout(() => popup.print(), 250);
+  }
+
+  function sendDocumentWhatsApp(type) {
+    if (!wedding.whatsapp) return alert("Nomor WhatsApp klien belum diisi.");
+    const payment = type === "receipt" ? selectedReceipt : null;
+    if (type === "receipt" && !payment) return alert("Pilih pembayaran terlebih dahulu.");
+    const phone = normalizeWhatsApp(wedding.whatsapp);
+    const message = type === "invoice"
+      ? `Halo ${wedding.couple}, berikut Invoice Tagihan dari AYNIS ANIS MAKEUP.\n\nPaket: ${wedding.packageName || "-"}\nTotal Tagihan: ${rp(f.netDeal)}\nSudah Dibayar: ${rp(f.incoming)}\nSisa Tagihan: ${rp(f.remaining)}\n\nTerima kasih.`
+      : `Halo ${wedding.couple}, pembayaran Anda sudah kami terima.\n\nKwitansi Pembayaran\n${payment.label}\nTanggal: ${payment.date ? formatDate(payment.date) : "-"}\nNominal: ${rp(payment.amount)}\n\nTerima kasih.\nAYNIS ANIS MAKEUP`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   }
 
   return <section className="detailPage">
@@ -1813,6 +1904,13 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
       <div className="paymentScheduleSummary"><div><small>Terbayar dari Jadwal</small><b>{rp(scheduledPaid)}</b></div><div><small>Total Uang Masuk</small><b>{rp(f.incoming)}</b></div><div><small>Sisa Tagihan</small><b>{rp(f.remaining)}</b></div></div>
       <div className="legacyPayments"><div className="legacyTitle"><div><b>Riwayat Pembayaran / Cicilan Tambahan</b><span className="mutedBlock">Setiap cicilan yang masuk otomatis mengurangi sisa DP berikutnya.</span></div>{!readOnly&&f.remaining>0&&<button className="softButton compact" onClick={onPay}><Plus size={15}/> Tambah Cicilan</button>}</div>{(wedding.payments||[]).length===0?<Empty text="Belum ada cicilan atau catatan pembayaran tambahan."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div>}</div>
     </section>
+
+    <section className="panel clientDocsPanel">
+      <div className="panelHeader compactHeader"><div><small>6 · DOKUMEN KLIEN</small><h2>Invoice & Kwitansi</h2><p>Dokumen hanya membaca data yang sudah ada dan tidak membuat transaksi baru pada pembukuan.</p></div></div>
+      <div className="clientDocActions"><button className="primary" onClick={()=>openClientDocument("invoice")}><FileText size={17}/> Invoice Tagihan</button><button className="softButton" onClick={()=>openClientDocument("receipt")}><ReceiptText size={17}/> Kwitansi Pembayaran</button></div>
+    </section>
+
+    {clientDoc && <div className="modal clientDocModal" onMouseDown={(e)=>{if(e.target===e.currentTarget)setClientDoc(null)}}><div className="clientDocBox"><button className="close" onClick={()=>setClientDoc(null)}><X size={17}/></button><small>DOKUMEN KLIEN</small><h3>{clientDoc==="invoice"?"Invoice Tagihan":"Kwitansi Pembayaran"}</h3>{clientDoc==="invoice"?<div className="docPreviewSummary"><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)} strong/></div>:<><label className="receiptSelectLabel">Pilih pembayaran<select value={selectedReceipt?.id||""} onChange={(e)=>setReceiptId(e.target.value)}>{receiptPayments.map((payment)=><option key={payment.id} value={payment.id}>{payment.label} · {rp(payment.amount)}{payment.date?` · ${formatDate(payment.date)}`:""}</option>)}</select></label>{selectedReceipt&&<div className="receiptPreview"><small>KWITANSI UNTUK</small><b>{selectedReceipt.label}</b><strong>{rp(selectedReceipt.amount)}</strong><span>{selectedReceipt.date?formatDate(selectedReceipt.date):"-"}</span></div>}</>}<div className="clientDocButtons"><button className="primary" onClick={()=>printClientDocument(clientDoc)}><Printer size={17}/> Cetak / Simpan PDF</button><button className="waDocButton" onClick={()=>sendDocumentWhatsApp(clientDoc)}><MessageCircle size={17}/> Kirim ke WhatsApp</button></div><p className="docHint">Untuk mengirim file PDF sebagai lampiran, pilih “Simpan sebagai PDF” saat mencetak, lalu lampirkan file tersebut di chat WhatsApp yang terbuka.</p></div></div>}
 
     {canViewFinance && <section className="panel profitPanel">
       <div className="sectionTitle"><div><small>6–7 · PENGELUARAN & RINGKASAN KEUNTUNGAN</small><h3>Posisi Keuangan Wedding</h3></div><TrendingUp size={24}/></div>
