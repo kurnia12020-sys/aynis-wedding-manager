@@ -25,6 +25,9 @@ import {
   TrendingUp,
   Cloud,
   LogOut,
+  Users,
+  UserPlus,
+  ShieldCheck,
 } from "lucide-react";
 
 import { supabase, supabaseConfigured } from "../lib/cloud";
@@ -174,6 +177,13 @@ export default function Page() {
   const [authPassword, setAuthPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [selectedWeddingId, setSelectedWeddingId] = useState(null);
+  const [membership, setMembership] = useState(null);
+  const [workspaceId, setWorkspaceId] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("admin");
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   const [weddingOpen, setWeddingOpen] = useState(false);
   const [weddingForm, setWeddingForm] = useState(emptyWedding);
@@ -274,6 +284,20 @@ export default function Page() {
     return { weddings: localWeddings, vendors: localVendors, packages: localPackages };
   }
 
+  async function loadMembers(wsId, activeMembership) {
+    if (!supabase || !wsId || activeMembership?.role !== "owner") {
+      setMembers([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("workspace_members")
+      .select("id,user_id,invited_email,role,permissions,status,created_at")
+      .eq("workspace_id", wsId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    setMembers(data || []);
+  }
+
   async function bootCloud(activeSession = null) {
     if (!supabaseConfigured || !supabase) {
       setCloudState("needs-config");
@@ -292,16 +316,37 @@ export default function Page() {
       }
       setSession(currentSession);
       if (!currentSession?.user) {
+        setMembership(null);
+        setWorkspaceId(null);
         setCloudState("signed-out");
         setReady(true);
         return;
       }
 
       const userId = currentSession.user.id;
+      await supabase.rpc("claim_workspace_invitation");
+      const { data: member, error: memberError } = await supabase
+        .from("workspace_members")
+        .select("id,workspace_id,role,permissions,status,invited_email")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (memberError) throw memberError;
+      if (!member || member.status !== "active") {
+        setMembership(null);
+        setWorkspaceId(null);
+        setCloudState("no-access");
+        setCloudMessage("Akun ini belum ditambahkan oleh Owner Aynis.");
+        setReady(true);
+        return;
+      }
+
+      setMembership(member);
+      setWorkspaceId(member.workspace_id);
+
       const { data, error } = await supabase
         .from("app_state")
-        .select("weddings,vendors,packages,schema_version,updated_at")
-        .eq("user_id", userId)
+        .select("weddings,vendors,packages,schema_version,updated_at,workspace_id")
+        .eq("workspace_id", member.workspace_id)
         .maybeSingle();
       if (error) throw error;
 
@@ -309,27 +354,27 @@ export default function Page() {
         setWeddings(Array.isArray(data.weddings) ? data.weddings : []);
         setVendors(Array.isArray(data.vendors) ? data.vendors : []);
         setPackages(Array.isArray(data.packages) ? data.packages : []);
-        setCloudMessage("Data cloud tersambung.");
-      } else {
+        setCloudMessage("Data workspace Aynis tersambung.");
+      } else if (member.role === "owner") {
         const local = readLocalSnapshot();
         const { error: insertError } = await supabase.from("app_state").insert({
           user_id: userId,
+          workspace_id: member.workspace_id,
           weddings: local.weddings,
           vendors: local.vendors,
           packages: local.packages,
-          schema_version: 4,
+          schema_version: 41,
           updated_at: new Date().toISOString(),
         });
         if (insertError) throw insertError;
         setWeddings(local.weddings);
         setVendors(local.vendors);
         setPackages(local.packages);
-        setCloudMessage(
-          local.weddings.length || local.vendors.length || local.packages.length
-            ? "Data lama dari perangkat ini sudah dipindahkan ke Supabase."
-            : "Database cloud baru siap digunakan."
-        );
+      } else {
+        throw new Error("Database workspace belum disiapkan oleh Owner.");
       }
+
+      await loadMembers(member.workspace_id, member);
       setCloudReady(true);
       setCloudState("online");
       setReady(true);
@@ -356,6 +401,9 @@ export default function Page() {
         setVendors([]);
         setPackages([]);
         setSelectedWeddingId(null);
+        setMembership(null);
+        setWorkspaceId(null);
+        setMembers([]);
         setCloudReady(false);
         setCloudState("signed-out");
         setReady(true);
@@ -365,16 +413,17 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (!cloudReady || !session?.user?.id || !supabase) return;
+    if (!cloudReady || !session?.user?.id || !workspaceId || !supabase) return;
+    const canEdit = membership?.role === "owner" || membership?.role === "admin";
+    if (!canEdit) return;
     const timer = setTimeout(async () => {
-      const { error } = await supabase.from("app_state").upsert({
-        user_id: session.user.id,
+      const { error } = await supabase.from("app_state").update({
         weddings,
         vendors,
         packages,
-        schema_version: 4,
+        schema_version: 41,
         updated_at: new Date().toISOString(),
-      });
+      }).eq("workspace_id", workspaceId);
       if (error) {
         console.error("Gagal sinkron Supabase", error);
         setCloudState("error");
@@ -384,7 +433,7 @@ export default function Page() {
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [weddings, vendors, packages, cloudReady, session]);
+  }, [weddings, vendors, packages, cloudReady, session, workspaceId, membership]);
 
   useEffect(() => {
     if (!cloudReady) return;
@@ -975,17 +1024,60 @@ export default function Page() {
   }
 
   if (!session) {
-    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.0 CLOUD</small><h1>{authMode === "signup" ? "Buat Akun Owner" : "Masuk ke Aynis"}</h1><p>Gunakan akun yang sama di HP atau laptop lain agar data wedding tetap sama.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
+    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.1 TEAM</small><h1>{authMode === "signup" ? "Buat / Aktivasi Akun" : "Masuk ke Aynis"}</h1><p>Owner, Admin, dan Staff masuk dari link yang sama. Hak akses mengikuti akun masing-masing.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
+  }
+
+  if (cloudState === "no-access") {
+    return <main className="cloudGate"><div className="cloudCard"><ShieldCheck size={34}/><small>AYNIS · AKSES TIM</small><h1>Akun belum diberi akses</h1><p>{cloudMessage || "Minta Owner menambahkan email ini sebagai Admin atau Staff."}</p><div className="cloudNotice">Login: {session?.user?.email || "-"}</div><button className="primary full" onClick={signOutCloud}>Keluar</button></div></main>;
+  }
+
+  const isOwner = membership?.role === "owner";
+  const canEditData = membership?.role === "owner" || membership?.role === "admin";
+
+  async function inviteMember(event) {
+    event.preventDefault();
+    if (!isOwner || !workspaceId || !inviteEmail.trim()) return;
+    setInviteBusy(true);
+    setCloudMessage("");
+    try {
+      const email = inviteEmail.trim().toLowerCase();
+      const permissions = inviteRole === "admin"
+        ? { edit_data: true, manage_users: false }
+        : { edit_data: false, manage_users: false };
+      const { error } = await supabase.from("workspace_members").insert({
+        workspace_id: workspaceId,
+        invited_email: email,
+        role: inviteRole,
+        permissions,
+        status: "pending",
+      });
+      if (error) throw error;
+      setInviteEmail("");
+      await loadMembers(workspaceId, membership);
+      setCloudMessage(`Undangan ${inviteRole} untuk ${email} sudah dibuat.`);
+    } catch (error) {
+      setCloudMessage(error.message || "Gagal menambahkan pengguna.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function removeMember(memberId) {
+    if (!isOwner) return;
+    if (!confirm("Hapus akses pengguna ini dari Aynis?")) return;
+    const { error } = await supabase.from("workspace_members").delete().eq("id", memberId);
+    if (error) return alert(error.message);
+    await loadMembers(workspaceId, membership);
   }
 
   return (
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.0 CLOUD FINANCE</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.1 TEAM FINANCE</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
-        <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Aynis Anis Makeup">AA</button></div>
+        <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
       </header>
 
       {tab === "Home" && (
@@ -996,7 +1088,7 @@ export default function Page() {
               <h2>Wedding rapi.<br/>Keuangan langsung terbaca.</h2>
               <p>Harga Deal, pembayaran klien, pengeluaran vendor, dan estimasi untung dalam satu aplikasi.</p>
             </div>
-            <button className="primary" onClick={openNewWedding}><Plus size={18}/> Tambah Wedding</button>
+            {canEditData&&<button className="primary" onClick={openNewWedding}><Plus size={18}/> Tambah Wedding</button>}
           </section>
 
           <section className="stats statsSix">
@@ -1022,7 +1114,7 @@ export default function Page() {
         <section className="panel">
           <div className="panelHeader">
             <div><small>DATA WEDDING</small><h2>Wedding</h2><p>Pilih wedding untuk melihat paket, pembayaran, pengeluaran, dan keuntungan.</p></div>
-            <button className="primary compact" onClick={openNewWedding}><Plus size={17}/> Tambah</button>
+            {canEditData&&<button className="primary compact" onClick={openNewWedding}><Plus size={17}/> Tambah</button>}
           </div>
           <section className="list">
             {weddings.length === 0 ? <Empty text="Belum ada data wedding."/> : [...weddings].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map((w)=><WeddingRow key={w.id} wedding={w} onDetail={openDetail} onWhatsApp={openWhatsApp}/>) }
@@ -1034,6 +1126,7 @@ export default function Page() {
         <WeddingDetail
           wedding={selectedWedding}
           vendors={vendors}
+          readOnly={!canEditData}
           onBack={() => setSelectedWeddingId(null)}
           onEdit={() => openEditWedding(selectedWedding)}
           onDelete={() => deleteWedding(selectedWedding.id)}
@@ -1071,7 +1164,7 @@ export default function Page() {
 
       {tab === "Kalender" && (
         <section className="panel calendarPanel">
-          <div className="panelHeader"><div><small>AGENDA WEDDING</small><h2>Kalender</h2><p>Jadwal otomatis mengikuti tanggal wedding.</p></div><button className="primary compact" onClick={openNewWedding}><Plus size={17}/> Wedding</button></div>
+          <div className="panelHeader"><div><small>AGENDA WEDDING</small><h2>Kalender</h2><p>Jadwal otomatis mengikuti tanggal wedding.</p></div>{canEditData&&<button className="primary compact" onClick={openNewWedding}><Plus size={17}/> Wedding</button>}</div>
           <div className="calendarAgenda">
             <div className="calendarAgendaHead"><div><small>AGENDA TERDEKAT</small><h3>Wedding Berikutnya</h3></div><span>{upcoming.length} mendatang</span></div>
             {upcoming.length===0 ? <div className="miniEmpty">Belum ada agenda wedding terdekat.</div> : <div className="agendaCards">{upcoming.slice(0,4).map((w)=><button key={w.id} className="agendaCard" onClick={()=>openDetail(w)}><div className="agendaDate"><b>{new Date(`${w.date}T00:00:00`).getDate()}</b><span>{monthNames[new Date(`${w.date}T00:00:00`).getMonth()].slice(0,3)}</span></div><div><b>{w.couple}</b><span>{w.packageName || "Belum ada paket"} · {w.place}</span></div><strong>{rp(w.dealPrice)}</strong></button>)}</div>}
@@ -1100,12 +1193,12 @@ export default function Page() {
       {tab === "Vendor" && (
         <div className="vendorPage">
           <section className="panel">
-            <div className="panelHeader"><div><small>MASTER HARGA</small><h2>Paket</h2><p>Pilih paket saat membuat wedding. Harga otomatis terisi, tetapi tetap bisa diedit khusus untuk setiap klien.</p></div><button className="primary compact" onClick={openNewPackageMaster}><Plus size={17}/> Paket</button></div>
-            <div className="packageMasterGrid">{packages.length===0?<Empty text="Belum ada Master Harga. Tambahkan paket dan harga default."/>:packages.map((pkg)=><div className="packageMasterCard" key={pkg.id}><div><small>PAKET</small><h3>{pkg.name}</h3>{pkg.notes&&<p>{pkg.notes}</p>}</div><strong>{rp(pkg.price)}</strong><div className="vendorActions"><button onClick={()=>openEditPackageMaster(pkg)}><Pencil size={16}/></button><button className="danger" onClick={()=>deletePackageMaster(pkg.id)}><Trash2 size={16}/></button></div></div>)}</div>
+            <div className="panelHeader"><div><small>MASTER HARGA</small><h2>Paket</h2><p>Pilih paket saat membuat wedding. Harga otomatis terisi, tetapi tetap bisa diedit khusus untuk setiap klien.</p></div>{canEditData&&<button className="primary compact" onClick={openNewPackageMaster}><Plus size={17}/> Paket</button>}</div>
+            <div className="packageMasterGrid">{packages.length===0?<Empty text="Belum ada Master Harga. Tambahkan paket dan harga default."/>:packages.map((pkg)=><div className="packageMasterCard" key={pkg.id}><div><small>PAKET</small><h3>{pkg.name}</h3>{pkg.notes&&<p>{pkg.notes}</p>}</div><strong>{rp(pkg.price)}</strong>{canEditData&&<div className="vendorActions"><button onClick={()=>openEditPackageMaster(pkg)}><Pencil size={16}/></button><button className="danger" onClick={()=>deletePackageMaster(pkg.id)}><Trash2 size={16}/></button></div>}</div>)}</div>
           </section>
           <section className="panel">
-            <div className="panelHeader"><div><small>DATABASE VENDOR</small><h2>Vendor</h2><p>Harga di sini hanya referensi. Saat dipakai di wedding, biaya aktual tetap bisa diubah.</p></div><button className="primary compact" onClick={openNewVendor}><Plus size={17}/> Vendor</button></div>
-            <div className="vendorGrid">{vendors.length===0?<Empty text="Belum ada vendor. Tambahkan vendor langganan Aynis."/>:vendors.map((v)=><VendorCard key={v.id} vendor={v} onWhatsApp={openWhatsApp} onEdit={openEditVendor} onDelete={deleteVendor}/>)}</div>
+            <div className="panelHeader"><div><small>DATABASE VENDOR</small><h2>Vendor</h2><p>Harga di sini hanya referensi. Saat dipakai di wedding, biaya aktual tetap bisa diubah.</p></div>{canEditData&&<button className="primary compact" onClick={openNewVendor}><Plus size={17}/> Vendor</button>}</div>
+            <div className="vendorGrid">{vendors.length===0?<Empty text="Belum ada vendor. Tambahkan vendor langganan Aynis."/>:vendors.map((v)=><VendorCard key={v.id} vendor={v} readOnly={!canEditData} onWhatsApp={openWhatsApp} onEdit={openEditVendor} onDelete={deleteVendor}/>)}</div>
           </section>
         </div>
       )}
@@ -1113,6 +1206,26 @@ export default function Page() {
       <nav>
         {[["Home",Home],["Wedding",HeartHandshake],["Keuangan",WalletCards],["Kalender",CalendarDays],["Vendor",Store]].map(([name,Icon])=><button key={name} className={tab===name?"active":""} onClick={()=>{setTab(name);if(name!=="Wedding")setSelectedWeddingId(null);}}><Icon size={20}/><span>{name}</span></button>)}
       </nav>
+
+      {accountOpen && (
+        <Modal onClose={()=>setAccountOpen(false)}>
+          <div className="teamPanel">
+            <ModalClose onClick={()=>setAccountOpen(false)}/>
+            <small>AKUN & AKSES</small><h3>Tim Aynis</h3>
+            <div className="currentRole"><ShieldCheck size={18}/><div><b>{membership?.role === "owner" ? "Owner" : membership?.role === "admin" ? "Admin" : "Staff"}</b><span>{session?.user?.email}</span></div></div>
+            {isOwner ? <>
+              <form className="inviteForm" onSubmit={inviteMember}>
+                <Field label="Email pengguna"><input type="email" value={inviteEmail} onChange={(e)=>setInviteEmail(e.target.value)} placeholder="admin@contoh.com" required/></Field>
+                <Field label="Role"><select value={inviteRole} onChange={(e)=>setInviteRole(e.target.value)}><option value="admin">Admin · kelola operasional</option><option value="staff">Staff · hanya lihat</option></select></Field>
+                <button className="primary full" type="submit" disabled={inviteBusy}><UserPlus size={17}/> {inviteBusy?"Menyimpan…":"Tambah Pengguna"}</button>
+              </form>
+              {cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}
+              <div className="memberList">{members.map((m)=><div className="memberRow" key={m.id}><div className="memberIcon"><Users size={17}/></div><div><b>{m.invited_email || (m.user_id===session?.user?.id?session?.user?.email:"Pengguna aktif")}</b><span>{m.role.toUpperCase()} · {m.status === "active" ? "Aktif" : "Menunggu aktivasi"}</span></div>{m.role!=="owner"&&<button className="iconDanger" onClick={()=>removeMember(m.id)}><Trash2 size={14}/></button>}</div>)}</div>
+              <div className="roleHelp"><b>Batas akses</b><span>Owner: semua fitur + kelola pengguna</span><span>Admin: kelola operasional, tanpa manajemen pengguna</span><span>Staff: hanya melihat data</span></div>
+            </> : <div className="roleHelp"><b>Batas akses Anda</b><span>{membership?.role === "admin" ? "Admin dapat mengelola data operasional, tetapi tidak dapat menambah/menghapus pengguna." : "Staff hanya dapat melihat data dan agenda tanpa mengubahnya."}</span></div>}
+          </div>
+        </Modal>
+      )}
 
       {weddingOpen && (
         <Modal onClose={()=>setWeddingOpen(false)}>
@@ -1285,18 +1398,18 @@ function FinanceRow({ wedding, onDetail }) {
   </button>;
 }
 
-function VendorCard({ vendor, onWhatsApp, onEdit, onDelete }) {
+function VendorCard({ vendor, readOnly=false, onWhatsApp, onEdit, onDelete }) {
   return <article className="vendorCard">
     <div className="vendorIcon"><Store size={22}/></div>
     <div className="vendorGrow"><small>{vendor.category}</small><h3>{vendor.name}</h3><p>{vendor.whatsapp || "Tanpa WhatsApp"}</p>{vendor.address&&<span>{vendor.address}</span>}<b className="referencePrice">Referensi {rp(vendor.referencePrice)}</b>{vendor.notes&&<em>{vendor.notes}</em>}</div>
-    <div className="vendorActions">{vendor.whatsapp&&<button onClick={()=>onWhatsApp(vendor.whatsapp)}><MessageCircle size={16}/></button>}<button onClick={()=>onEdit(vendor)}><Pencil size={16}/></button><button className="danger" onClick={()=>onDelete(vendor.id)}><Trash2 size={16}/></button></div>
+    <div className="vendorActions">{vendor.whatsapp&&<button onClick={()=>onWhatsApp(vendor.whatsapp)}><MessageCircle size={16}/></button>}{!readOnly&&<><button onClick={()=>onEdit(vendor)}><Pencil size={16}/></button><button className="danger" onClick={()=>onDelete(vendor.id)}><Trash2 size={16}/></button></>}</div>
   </article>;
 }
 
-function WeddingDetail({ wedding, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onWhatsApp }) {
+function WeddingDetail({ wedding, readOnly=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onWhatsApp }) {
   const f = financials(wedding);
   return <section className="detailPage">
-    <div className="detailTopActions"><button className="backButton" onClick={onBack}><ArrowLeft size={17}/> Semua Wedding</button><div><button onClick={onEdit}><Pencil size={15}/> Edit</button>{(f.remaining===0||wedding.completed)&&<button className={wedding.completed?"":"completeButton"} onClick={onToggleComplete}><CheckCircle2 size={15}/> {wedding.completed?"Buka Lagi":"Tandai Selesai"}</button>}<button className="danger" onClick={onDelete}><Trash2 size={15}/> Hapus</button></div></div>
+    <div className="detailTopActions"><button className="backButton" onClick={onBack}><ArrowLeft size={17}/> Semua Wedding</button>{!readOnly&&<div><button onClick={onEdit}><Pencil size={15}/> Edit</button>{(f.remaining===0||wedding.completed)&&<button className={wedding.completed?"":"completeButton"} onClick={onToggleComplete}><CheckCircle2 size={15}/> {wedding.completed?"Buka Lagi":"Tandai Selesai"}</button>}<button className="danger" onClick={onDelete}><Trash2 size={15}/> Hapus</button></div>}</div>
 
     <section className="detailHero panel">
       <div><small>1 · DATA PENGANTIN</small><h2>{wedding.couple}</h2><div className="infoLines"><span><Calendar size={15}/>{formatDate(wedding.date)}</span><span><MapPin size={15}/>{wedding.place}</span>{wedding.whatsapp&&<button onClick={onWhatsApp}><Phone size={15}/>{wedding.whatsapp}</button>}</div>{wedding.notes&&<p>{wedding.notes}</p>}</div>
@@ -1309,22 +1422,22 @@ function WeddingDetail({ wedding, onBack, onEdit, onDelete, onPay, onEditPayment
     </section>
 
     <section className="panel">
-      <div className="panelHeader compactHeader"><div><small>3 · ISI PAKET / VENDOR</small><h2>Vendor & Biaya</h2><p>Biaya aktual khusus wedding ini. Pembayaran vendor tersimpan sebagai riwayat.</p></div><button className="primary compact" onClick={onAddItem}><Plus size={16}/> Tambah Item</button></div>
+      <div className="panelHeader compactHeader"><div><small>3 · ISI PAKET / VENDOR</small><h2>Vendor & Biaya</h2><p>Biaya aktual khusus wedding ini. Pembayaran vendor tersimpan sebagai riwayat.</p></div>{!readOnly&&<button className="primary compact" onClick={onAddItem}><Plus size={16}/> Tambah Item</button>}</div>
       {(wedding.packageItems||[]).length===0?<Empty text="Belum ada isi paket atau pengeluaran."/>:<div className="expenseList">{(wedding.packageItems||[]).map((item)=>{
         const history = vendorPaymentHistory(item, wedding.date || "");
         const remainingVendor = Math.max(Number(item.actualCost||0)-vendorPaid(item),0);
         return <div className="expenseCard" key={item.id}>
-          <div className="expenseRow"><div className="expenseMain"><small>{item.category}</small><b>{item.name}</b>{item.notes&&<span>{item.notes}</span>}</div><div className="expenseMoney"><b>{rp(item.actualCost)}</b><span>Dibayar {rp(vendorPaid(item))}</span><i className={`vendorStatus ${itemStatus(item)==="Lunas"?"paid":""}`}>{itemStatus(item)}</i></div><div className="iconActions"><button onClick={()=>onEditItem(item)}><Pencil size={15}/></button><button className="danger" onClick={()=>onDeleteItem(item.id)}><Trash2 size={15}/></button></div></div>
-          <div className="vendorPaymentBar"><div><small>SISA VENDOR</small><b>{rp(remainingVendor)}</b></div>{remainingVendor>0&&<button onClick={()=>onAddVendorPayment(item)}><Plus size={14}/> Bayar Vendor</button>}</div>
-          {history.length>0&&<div className="vendorPaymentHistory">{history.map((payment)=><div className="vendorPaymentRow" key={payment.id}><div><b>{payment.label||"Pembayaran Vendor"}</b><span>{payment.date?formatDate(payment.date):""}{payment.notes?` · ${payment.notes}`:""}</span></div><strong>{rp(payment.amount)}</strong><div className="miniActions"><button onClick={()=>onEditVendorPayment(item,payment)}><Pencil size={13}/></button><button className="iconDanger" onClick={()=>onDeleteVendorPayment(item.id,payment.id)}><Trash2 size={13}/></button></div></div>)}</div>}
+          <div className="expenseRow"><div className="expenseMain"><small>{item.category}</small><b>{item.name}</b>{item.notes&&<span>{item.notes}</span>}</div><div className="expenseMoney"><b>{rp(item.actualCost)}</b><span>Dibayar {rp(vendorPaid(item))}</span><i className={`vendorStatus ${itemStatus(item)==="Lunas"?"paid":""}`}>{itemStatus(item)}</i></div>{!readOnly&&<div className="iconActions"><button onClick={()=>onEditItem(item)}><Pencil size={15}/></button><button className="danger" onClick={()=>onDeleteItem(item.id)}><Trash2 size={15}/></button></div>}</div>
+          <div className="vendorPaymentBar"><div><small>SISA VENDOR</small><b>{rp(remainingVendor)}</b></div>{!readOnly&&remainingVendor>0&&<button onClick={()=>onAddVendorPayment(item)}><Plus size={14}/> Bayar Vendor</button>}</div>
+          {history.length>0&&<div className="vendorPaymentHistory">{history.map((payment)=><div className="vendorPaymentRow" key={payment.id}><div><b>{payment.label||"Pembayaran Vendor"}</b><span>{payment.date?formatDate(payment.date):""}{payment.notes?` · ${payment.notes}`:""}</span></div><strong>{rp(payment.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditVendorPayment(item,payment)}><Pencil size={13}/></button><button className="iconDanger" onClick={()=>onDeleteVendorPayment(item.id,payment.id)}><Trash2 size={13}/></button></div>}</div>)}</div>}
         </div>;
       })}</div>}
       <div className="expenseTotals"><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/></div>
     </section>
 
     <section className="panel">
-      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Riwayat Pembayaran</h2><p>DP, cicilan, dan pelunasan tercatat satu per satu.</p></div>{f.remaining>0&&<button className="primary compact" onClick={onPay}><Plus size={16}/> Catat Pembayaran</button>}</div>
-      {(wedding.payments||[]).length===0?<Empty text="Belum ada pembayaran klien."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong><div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div></div>)}</div>}
+      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Riwayat Pembayaran</h2><p>DP, cicilan, dan pelunasan tercatat satu per satu.</p></div>{!readOnly&&f.remaining>0&&<button className="primary compact" onClick={onPay}><Plus size={16}/> Catat Pembayaran</button>}</div>
+      {(wedding.payments||[]).length===0?<Empty text="Belum ada pembayaran klien."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div>}
     </section>
 
     <section className="panel profitPanel">

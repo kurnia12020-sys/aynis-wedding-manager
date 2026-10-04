@@ -1,17 +1,17 @@
-# AYNIS Wedding Manager V4.0 Cloud Data
+# AYNIS Wedding Manager V4.1 — Team Roles
 
-Versi ini memindahkan penyimpanan utama AYNIS Wedding Manager dari perangkat ke Supabase.
+V4.1 menambahkan workspace bersama dan role Owner/Admin/Staff di atas Supabase Cloud.
 
-## Fitur cloud
-- Akun Owner dengan email + password Supabase Auth.
-- Data Wedding, Vendor, Master Harga, pembayaran, pengeluaran, kalender, dan riwayat pembayaran vendor tersimpan di Supabase.
-- Login dengan akun yang sama di perangkat lain menampilkan data yang sama.
-- Data V3/V3.2 yang masih ada di localStorage otomatis diimpor saat akun pertama kali dipakai jika cloud masih kosong.
-- localStorage tetap dipakai sebagai cache/backup lokal, bukan sumber utama.
-- RLS aktif agar setiap akun hanya dapat membaca dan menulis datanya sendiri.
+## Role
+- Owner: akses penuh dan Manajemen Pengguna.
+- Admin: mengelola data operasional, tidak dapat mengelola pengguna/Owner.
+- Staff: read-only.
 
-## Environment Vercel
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+## Cara menambahkan Admin
+1. Owner login seperti biasa.
+2. Klik avatar **AA** > Tim Aynis.
+3. Masukkan email admin, pilih Admin, lalu Tambah Pengguna.
+4. Admin membuka URL Aynis yang sama, memilih Buat / Aktivasi Akun dengan email undangan, lalu membuat password.
+5. Setelah login, role diterapkan otomatis.
 
-Keduanya sudah disiapkan di project Vercel Aynis.
+Database utama tetap Supabase. Jangan taruh secret/service role key di browser atau NEXT_PUBLIC env.
