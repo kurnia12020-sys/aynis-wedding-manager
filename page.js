@@ -11,6 +11,7 @@ const emptyForm = {
   booking: "",
   paid: "",
   status: "DP",
+  notes: "",
 };
 
 const rupiah = (value) =>
@@ -143,22 +144,14 @@ export default function Home() {
               <button type="button" className="close" onClick={() => setShowForm(false)}>×</button>
             </div>
 
-            <label>Nama Klien<input required value={form.client} onChange={(e)=>setForm({...form,client:e.target.value})} placeholder="Contoh: Rina & Adi" /></label>
-            <div className="grid2">
-              <label>No. WhatsApp<input value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="08xxxxxxxxxx" /></label>
-              <label>Tanggal Acara<input required type="date" value={form.date} onChange={(e)=>setForm({...form,date:e.target.value})} /></label>
-            </div>
-            <label>Lokasi<input value={form.location} onChange={(e)=>setForm({...form,location:e.target.value})} placeholder="Gedung / alamat acara" /></label>
-            <label>Paket<input value={form.packageName} onChange={(e)=>setForm({...form,packageName:e.target.value})} placeholder="Contoh: Paket Gold" /></label>
-            <div className="grid2">
-              <label>Nilai Booking<input required type="number" min="0" value={form.booking} onChange={(e)=>setForm({...form,booking:e.target.value})} placeholder="15000000" /></label>
-              <label>Sudah Dibayar / DP<input type="number" min="0" value={form.paid} onChange={(e)=>setForm({...form,paid:e.target.value})} placeholder="5000000" /></label>
-            </div>
-            <label>Status
-              <select value={form.status} onChange={(e)=>setForm({...form,status:e.target.value})}>
-                <option>DP</option><option>Belum Bayar</option><option>Lunas</option>
-              </select>
-            </label>
+            <label>Nama Pengantin<input required value={form.client} onChange={(e)=>setForm({...form,client:e.target.value})} placeholder="Contoh: Rina & Andi" /></label>
+            <label>Tanggal Wedding<input required type="date" value={form.date} onChange={(e)=>setForm({...form,date:e.target.value})} /></label>
+            <label>Lokasi<input value={form.location} onChange={(e)=>setForm({...form,location:e.target.value})} placeholder="Gedung / alamat" /></label>
+            <label>Nilai Booking<input required type="number" min="0" value={form.booking} onChange={(e)=>setForm({...form,booking:e.target.value})} placeholder="15000000" /></label>
+            <label>DP / Sudah Dibayar<input type="number" min="0" value={form.paid} onChange={(e)=>setForm({...form,paid:e.target.value})} placeholder="5000000" /></label>
+            <label>Sisa Pembayaran<input readOnly value={rupiah(Math.max(Number(form.booking || 0) - Number(form.paid || 0), 0))} /></label>
+            <label>Nomor WhatsApp<input type="tel" value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="08xxxxxxxxxx" /></label>
+            <label>Catatan<textarea rows="3" value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})} placeholder="Catatan kebutuhan klien / wedding" /></label>
             <div className="formActions">
               <button type="button" className="secondary" onClick={() => setShowForm(false)}>Batal</button>
               <button className="primary" type="submit">Simpan Wedding</button>
