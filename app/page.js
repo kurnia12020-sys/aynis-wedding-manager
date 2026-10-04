@@ -31,6 +31,7 @@ import {
   Search,
   FileText,
   Printer,
+  Bell,
 } from "lucide-react";
 
 import { supabase, supabaseConfigured } from "../lib/cloud";
@@ -129,6 +130,25 @@ function shiftDate(date, days) {
   const d = new Date(`${date}T00:00:00`);
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+
+function reminderStatus(stage) {
+  if (!stage?.dueDate) return { key: "none", label: "Tanggal belum diatur", days: null };
+  if (stage.paid || Number(stage.amount || 0) <= 0) return { key: "paid", label: "Lunas", days: null };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(`${stage.dueDate}T00:00:00`);
+  const days = Math.round((due - today) / 86400000);
+  if (days < 0) return { key: "overdue", label: `Terlambat ${Math.abs(days)} hari`, days };
+  if (days === 0) return { key: "today", label: "Jatuh tempo hari ini", days };
+  if (days <= 3) return { key: "soon", label: `${days} hari lagi`, days };
+  return { key: "safe", label: `Aman · ${days} hari lagi`, days };
+}
+
+function reminderMessage(wedding, stage) {
+  const amount = rp(stage.amount);
+  return `Halo Kak ${wedding.couple || ""}, mengingatkan pembayaran ${stage.label} sebesar ${amount} yang jatuh tempo pada ${formatDate(stage.dueDate)}. Terima kasih. — AYNIS ANIS MAKEUP`;
 }
 
 function addOnTotal(wedding) {
@@ -568,7 +588,7 @@ export default function Page() {
         weddings,
         vendors,
         packages,
-        schema_version: 45,
+        schema_version: 46,
         updated_at: new Date().toISOString(),
       }).eq("workspace_id", workspaceId);
       if (error) {
@@ -683,6 +703,20 @@ export default function Page() {
     return [...weddings]
       .filter((w) => w.date && new Date(`${w.date}T00:00:00`) >= current)
       .sort((a, b) => a.date.localeCompare(b.date));
+  }, [weddings]);
+
+  const paymentReminders = useMemo(() => {
+    const rows = [];
+    weddings.forEach((wedding) => {
+      const schedule = applyPaymentHistoryToSchedule(wedding, defaultPaymentSchedule(wedding, wedding.paymentSchedule));
+      schedule.forEach((stage) => {
+        const status = reminderStatus(stage);
+        if (["overdue", "today", "soon"].includes(status.key) && Number(stage.amount || 0) > 0) {
+          rows.push({ wedding, stage, status });
+        }
+      });
+    });
+    return rows.sort((a, b) => (a.status.days ?? 999) - (b.status.days ?? 999));
   }, [weddings]);
 
   const calendarDays = useMemo(() => {
@@ -834,7 +868,7 @@ export default function Page() {
         : [record, ...cloudWeddings.filter((w) => w.id !== record.id)];
       const { error: saveError } = await supabase
         .from("app_state")
-        .update({ weddings: nextWeddings, schema_version: 45, updated_at: new Date().toISOString() })
+        .update({ weddings: nextWeddings, schema_version: 46, updated_at: new Date().toISOString() })
         .eq("workspace_id", workspaceId);
       if (saveError) throw saveError;
       setCloudState("online");
@@ -1307,11 +1341,12 @@ export default function Page() {
     setVendors((current) => current.filter((v) => v.id !== id));
   }
 
-  function openWhatsApp(phone) {
+  function openWhatsApp(phone, message = "") {
     if (!phone) return;
     let clean = phone.replace(/\D/g, "");
     if (clean.startsWith("0")) clean = `62${clean.slice(1)}`;
-    window.open(`https://wa.me/${clean}`, "_blank");
+    const text = message ? `?text=${encodeURIComponent(message)}` : "";
+    window.open(`https://wa.me/${clean}${text}`, "_blank");
   }
 
   function openDetail(wedding) {
@@ -1389,7 +1424,7 @@ export default function Page() {
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.13 ADD-ON LUAR PAKET</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.16 REMINDER JATUH TEMPO</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
         <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
@@ -1417,6 +1452,11 @@ export default function Page() {
             <Card t="Wedding" v={weddings.length} s="Total data tersimpan" />
             <Card t="Akses" v="Admin" s="Data keuangan bisnis disembunyikan" />
           </section>}
+
+          <section className="panel reminderPanel">
+            <div className="panelHeader compactHeader"><div><small>REMINDER JATUH TEMPO</small><h2>Tagihan Perlu Perhatian</h2><p>Menampilkan pembayaran yang terlambat, jatuh tempo hari ini, atau maksimal 3 hari lagi.</p></div><div className="reminderCount"><Bell size={16}/>{paymentReminders.length}</div></div>
+            {paymentReminders.length===0?<Empty text="Tidak ada tagihan yang perlu diingatkan dalam 3 hari ke depan."/>:<div className="reminderList">{paymentReminders.slice(0,6).map(({wedding,stage,status})=><div className={`reminderRow ${status.key}`} key={`${wedding.id}-${stage.key}`}><button className="reminderMain" onClick={()=>openDetail(wedding)}><b>{wedding.couple}</b><span>{stage.label} · {formatDate(stage.dueDate)}</span><strong>{rp(stage.amount)}</strong></button><span className={`reminderBadge ${status.key}`}>{status.label}</span>{wedding.whatsapp&&<button className="reminderWa" onClick={()=>openWhatsApp(wedding.whatsapp, reminderMessage(wedding,stage))}><MessageCircle size={15}/> Ingatkan WA</button>}</div>)}</div>}
+          </section>
 
           <div className="sectionHead">
             <div><small>AGENDA TERDEKAT</small><h3>Wedding Mendatang</h3></div>
@@ -1897,7 +1937,7 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
       <div className="paymentScheduleList">
         {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
           <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={stage.paid?"Sudah dibayar":"Belum dibayar"}>{stage.paid?<CheckCircle2 size={22}/>:<span/>}</button>
-          <div className="paymentStageMain"><b>{stage.label}</b><span>{stage.dueDate?`Jatuh tempo ${formatDate(stage.dueDate)}`:(stage.key==="dp1"?"Saat booking tanggal":"Tanggal dapat disesuaikan")}</span><em>{stage.paid?`Sudah dibayar${stage.paidDate?` · ${formatDate(stage.paidDate)}`:""}`:"Belum dibayar"}</em></div>
+          <div className="paymentStageMain"><b>{stage.label}</b><span>{stage.dueDate?`Jatuh tempo ${formatDate(stage.dueDate)}`:(stage.key==="dp1"?"Saat booking tanggal":"Tanggal dapat disesuaikan")}</span><em>{stage.paid?`Sudah dibayar${stage.paidDate?` · ${formatDate(stage.paidDate)}`:""}`:"Belum dibayar"}</em>{stage.dueDate&&!stage.paid&&Number(stage.amount||0)>0&&<i className={`stageReminder ${reminderStatus(stage).key}`}>{reminderStatus(stage).label}</i>}</div>
           <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<div className="paymentEditBox"><input type="text" inputMode="numeric" value={paymentDrafts[stage.key] ?? formatMoneyInput(stage.amount)} onChange={(e)=>setPaymentDrafts((current)=>({...current,[stage.key]:formatMoneyInput(parseMoney(e.target.value))}))} placeholder="0"/>{parseMoney(paymentDrafts[stage.key] ?? stage.amount)!==Number(stage.amount||0)&&<button className="saveStageButton" onClick={()=>savePaymentStageAmount(stage)}>Simpan</button>}</div>}</div>
         </div>)}
       </div>
