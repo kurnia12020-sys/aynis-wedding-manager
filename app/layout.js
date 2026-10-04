@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Aynis Wedding Manager V4.6',
+  title: 'Aynis Wedding Manager V4.7',
   description: 'Finance Flow — Wedding & Finance Management for Aynis Anis Makeup',
 };
 

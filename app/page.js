@@ -79,6 +79,13 @@ const rp = (n) =>
     maximumFractionDigits: 0,
   }).format(Number(n || 0));
 
+const onlyDigits = (value) => String(value ?? "").replace(/\D/g, "");
+const parseMoney = (value) => Number(onlyDigits(value) || 0);
+const formatMoneyInput = (value) => {
+  const digits = onlyDigits(value);
+  return digits ? Number(digits).toLocaleString("id-ID") : "";
+};
+
 const formatDate = (date) => {
   if (!date) return "-";
   return new Date(`${date}T00:00:00`).toLocaleDateString("id-ID", {
@@ -110,42 +117,71 @@ function defaultPaymentSchedule(wedding, existing = null) {
   const dp3 = Math.max(target70 - dp1 - dp2, 0);
   const finalPayment = Math.max(deal - dp1 - dp2 - dp3, 0);
   const defaults = [
-    { id: "dp1", key: "dp1", label: "DP 1 / Booking Tanggal", amount: dp1, dueDate: "", paid: false, paidDate: "", notes: "Booking tanggal" },
-    { id: "dp2", key: "dp2", label: "DP 2 / Target 30%", amount: dp2, dueDate: "", paid: false, paidDate: "", notes: "Total pembayaran mencapai 30% dari Harga Deal" },
-    { id: "dp3", key: "dp3", label: "DP 3 / Target 70% (H-7)", amount: dp3, dueDate: shiftDate(wedding?.date, -7), paid: false, paidDate: "", notes: "Total pembayaran mencapai 70% dari Harga Deal" },
-    { id: "final", key: "final", label: "Pelunasan / H+2", amount: finalPayment, dueDate: shiftDate(wedding?.date, 2), paid: false, paidDate: "", notes: "Sisa tagihan setelah acara" },
+    { id: "dp1", key: "dp1", label: "DP 1 / Booking Tanggal", amount: dp1, plannedAmount: dp1, dueDate: "", paid: false, paidDate: "", notes: "Booking tanggal" },
+    { id: "dp2", key: "dp2", label: "DP 2 / Target 30%", amount: dp2, plannedAmount: dp2, dueDate: "", paid: false, paidDate: "", notes: "Total pembayaran mencapai 30% dari Harga Deal" },
+    { id: "dp3", key: "dp3", label: "DP 3 / Target 70% (H-7)", amount: dp3, plannedAmount: dp3, dueDate: shiftDate(wedding?.date, -7), paid: false, paidDate: "", notes: "Total pembayaran mencapai 70% dari Harga Deal" },
+    { id: "final", key: "final", label: "Pelunasan / H+2", amount: finalPayment, plannedAmount: finalPayment, dueDate: shiftDate(wedding?.date, 2), paid: false, paidDate: "", notes: "Sisa tagihan setelah acara" },
   ];
   if (!Array.isArray(existing) || existing.length === 0) return defaults;
   return defaults.map((base) => {
     const saved = existing.find((item) => item.key === base.key || item.id === base.id);
-    return saved ? { ...base, ...saved, dueDate: ["dp3", "final"].includes(base.key) ? base.dueDate : (saved.dueDate || base.dueDate) } : base;
+    if (!saved) return base;
+    const plannedAmount = saved.plannedAmount != null ? Number(saved.plannedAmount || 0) : Number(saved.amount ?? base.amount);
+    return { ...base, ...saved, plannedAmount, dueDate: ["dp3", "final"].includes(base.key) ? base.dueDate : (saved.dueDate || base.dueDate) };
   });
 }
 
+function paymentHistoryTotal(wedding) {
+  return (wedding.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+}
+
+function applyPaymentHistoryToSchedule(wedding, schedule) {
+  let credit = paymentHistoryTotal(wedding);
+  return schedule.map((item) => {
+    const plannedAmount = Number(item.plannedAmount ?? item.amount ?? 0);
+    if (item.paid) {
+      // If this stage had already been reduced by a cicilan before being checked paid,
+      // consume only that gap so the same cicilan is not used twice on later stages.
+      const usedCredit = Math.max(plannedAmount - Number(item.amount || 0), 0);
+      credit = Math.max(credit - usedCredit, 0);
+      return { ...item, plannedAmount };
+    }
+    const reduction = Math.min(credit, plannedAmount);
+    credit -= reduction;
+    return { ...item, plannedAmount, amount: Math.max(plannedAmount - reduction, 0) };
+  });
+}
 
 function recalculateFollowingPayments(wedding, schedule, changedKey) {
   const deal = Number(wedding?.dealPrice || 0);
   const target30 = Math.round(deal * 0.3);
   const target70 = Math.round(deal * 0.7);
-  const next = schedule.map((item) => ({ ...item, amount: Number(item.amount || 0) }));
+  const next = schedule.map((item) => ({
+    ...item,
+    plannedAmount: Number(item.plannedAmount ?? item.amount ?? 0),
+    amount: Number(item.amount || 0),
+  }));
   const byKey = Object.fromEntries(next.map((item) => [item.key, item]));
 
-  const dp1 = Number(byKey.dp1?.amount || 0);
+  const dp1 = Number(byKey.dp1?.plannedAmount || 0);
   if (changedKey === "dp1") {
-    byKey.dp2.amount = Math.max(target30 - dp1, 0);
+    byKey.dp2.plannedAmount = Math.max(target30 - dp1, 0);
+    if (!byKey.dp2.paid) byKey.dp2.amount = byKey.dp2.plannedAmount;
   }
 
-  const dp2 = Number(byKey.dp2?.amount || 0);
+  const dp2 = Number(byKey.dp2?.plannedAmount || 0);
   if (["dp1", "dp2"].includes(changedKey)) {
-    byKey.dp3.amount = Math.max(target70 - dp1 - dp2, 0);
+    byKey.dp3.plannedAmount = Math.max(target70 - dp1 - dp2, 0);
+    if (!byKey.dp3.paid) byKey.dp3.amount = byKey.dp3.plannedAmount;
   }
 
-  const dp3 = Number(byKey.dp3?.amount || 0);
+  const dp3 = Number(byKey.dp3?.plannedAmount || 0);
   if (["dp1", "dp2", "dp3"].includes(changedKey)) {
-    byKey.final.amount = Math.max(deal - dp1 - dp2 - dp3, 0);
+    byKey.final.plannedAmount = Math.max(deal - dp1 - dp2 - dp3, 0);
+    if (!byKey.final.paid) byKey.final.amount = byKey.final.plannedAmount;
   }
 
-  return next;
+  return applyPaymentHistoryToSchedule(wedding, next);
 }
 
 function scheduledPaidTotal(wedding) {
@@ -153,8 +189,7 @@ function scheduledPaidTotal(wedding) {
 }
 
 function totalPayments(wedding) {
-  const history = (wedding.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-  return history + scheduledPaidTotal(wedding);
+  return paymentHistoryTotal(wedding) + scheduledPaidTotal(wedding);
 }
 
 function totalExpenses(wedding) {
@@ -719,9 +754,11 @@ export default function Page() {
       record.paymentSchedule = record.paymentSchedule.map((item) => item.key === "dp1" ? {
         ...item,
         amount: initialPayment,
+        plannedAmount: initialPayment,
         paid: true,
         paidDate: new Date().toISOString().slice(0, 10),
       } : item);
+      record.paymentSchedule = recalculateFollowingPayments(record, record.paymentSchedule, "dp1");
     }
 
     let nextWeddings = null;
@@ -841,7 +878,7 @@ export default function Page() {
     event.preventDefault();
     const wedding = weddings.find((w) => String(w.id) === String(paymentWeddingId));
     if (!wedding) return;
-    const amount = Number(paymentAmount || 0);
+    const amount = parseMoney(paymentAmount);
     const editing = (wedding.payments || []).find((p) => String(p.id) === String(paymentEditId));
     const f = financials(wedding);
     const maxAllowed = f.remaining + Number(editing?.amount || 0);
@@ -862,25 +899,37 @@ export default function Page() {
       if (String(w.id) !== String(paymentWeddingId)) return w;
       const list = w.payments || [];
       const exists = list.some((p) => String(p.id) === String(record.id));
-      return { ...w, payments: exists ? list.map((p) => String(p.id) === String(record.id) ? record : p) : [...list, record] };
+      const payments = exists ? list.map((p) => String(p.id) === String(record.id) ? record : p) : [...list, record];
+      const nextWedding = { ...w, payments };
+      const schedule = defaultPaymentSchedule(nextWedding, w.paymentSchedule);
+      return { ...nextWedding, paymentSchedule: applyPaymentHistoryToSchedule(nextWedding, schedule) };
     }));
     setPaymentOpen(false);
   }
 
   function deletePayment(weddingId, paymentId) {
     if (!confirm("Hapus catatan pembayaran ini?")) return;
-    setWeddings((current) => current.map((w) =>
-      w.id === weddingId ? { ...w, payments: (w.payments || []).filter((p) => p.id !== paymentId) } : w
-    ));
+    setWeddings((current) => current.map((w) => {
+      if (w.id !== weddingId) return w;
+      const nextWedding = { ...w, payments: (w.payments || []).filter((p) => p.id !== paymentId) };
+      const schedule = defaultPaymentSchedule(nextWedding, w.paymentSchedule);
+      return { ...nextWedding, paymentSchedule: applyPaymentHistoryToSchedule(nextWedding, schedule) };
+    }));
   }
 
   function updatePaymentScheduleItem(weddingId, stageKey, patch) {
     setWeddings((current) => current.map((w) => {
       if (String(w.id) !== String(weddingId)) return w;
       const schedule = defaultPaymentSchedule(w, w.paymentSchedule);
-      let updated = schedule.map((item) => item.key === stageKey ? { ...item, ...patch } : item);
+      let updated = schedule.map((item) => item.key === stageKey ? {
+        ...item,
+        ...patch,
+        ...(Object.prototype.hasOwnProperty.call(patch, "amount") ? { plannedAmount: Number(patch.amount || 0), amount: Number(patch.amount || 0) } : {}),
+      } : item);
       if (Object.prototype.hasOwnProperty.call(patch, "amount")) {
         updated = recalculateFollowingPayments(w, updated, stageKey);
+      } else {
+        updated = applyPaymentHistoryToSchedule(w, updated);
       }
       return { ...w, paymentSchedule: updated };
     }));
@@ -897,10 +946,11 @@ export default function Page() {
   function resetPaymentSchedule(wedding) {
     if (!confirm("Hitung ulang nominal DP berdasarkan Harga Deal saat ini? Status pembayaran yang sudah dicentang akan dipertahankan.")) return;
     const current = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
-    const fresh = defaultPaymentSchedule(wedding, null).map((base) => {
+    const freshBase = defaultPaymentSchedule(wedding, null).map((base) => {
       const oldStage = current.find((item) => item.key === base.key);
-      return { ...base, paid: Boolean(oldStage?.paid), paidDate: oldStage?.paidDate || "" };
+      return { ...base, paid: Boolean(oldStage?.paid), paidDate: oldStage?.paidDate || "", amount: oldStage?.paid ? Number(oldStage.amount || 0) : base.amount };
     });
+    const fresh = applyPaymentHistoryToSchedule(wedding, freshBase);
     setWeddings((list) => list.map((w) => String(w.id) === String(wedding.id) ? { ...w, paymentSchedule: fresh } : w));
   }
 
@@ -1409,8 +1459,8 @@ export default function Page() {
               <Field label="Pilih Paket dari Master Harga"><select value={packages.find((p)=>p.name===weddingForm.packageName)?String(packages.find((p)=>p.name===weddingForm.packageName).id):"__manual__"} onChange={(e)=>chooseMasterPackage(e.target.value)}><option value="__manual__">— Paket manual / khusus —</option>{packages.filter((p)=>p.active!==false).map((pkg)=><option key={pkg.id} value={pkg.id}>{pkg.name} · {rp(pkg.price)}</option>)}</select><em>Pilih paket untuk mengisi nama dan harga otomatis.</em></Field>
               <Field label="Nama Paket"><input id="manual-package-name" value={weddingForm.packageName} onChange={(e)=>setWeddingForm({...weddingForm,packageName:e.target.value})} placeholder="Contoh: Platinum"/><em>Nama tetap bisa diubah untuk paket khusus.</em></Field>
               <div className="formTwoCols">
-                <Field label="Harga Deal Klien"><input type="number" inputMode="numeric" min="0" value={weddingForm.dealPrice} onChange={(e)=>setWeddingForm({...weddingForm,dealPrice:e.target.value})} placeholder="15000000"/>{weddingForm.dealPrice&&<em>{rp(weddingForm.dealPrice)}</em>}</Field>
-                {!weddingForm.id ? <Field label="DP / Pembayaran Awal"><input type="number" inputMode="numeric" min="0" value={weddingForm.initialPayment} onChange={(e)=>setWeddingForm({...weddingForm,initialPayment:e.target.value})} placeholder="5000000"/>{weddingForm.initialPayment&&<em>{rp(weddingForm.initialPayment)}</em>}</Field> : <div className="editPaymentHint"><small>PEMBAYARAN</small><b>{rp(totalPayments(weddings.find((w)=>w.id===weddingForm.id)||{}))}</b><span>Riwayat pembayaran tetap dikelola dari Detail Wedding.</span></div>}
+                <Field label="Harga Deal Klien"><input type="text" inputMode="numeric" value={formatMoneyInput(weddingForm.dealPrice)} onChange={(e)=>setWeddingForm({...weddingForm,dealPrice:onlyDigits(e.target.value)})} placeholder="15.000.000"/>{weddingForm.dealPrice&&<em>{rp(weddingForm.dealPrice)}</em>}</Field>
+                {!weddingForm.id ? <Field label="DP / Pembayaran Awal"><input type="text" inputMode="numeric" value={formatMoneyInput(weddingForm.initialPayment)} onChange={(e)=>setWeddingForm({...weddingForm,initialPayment:onlyDigits(e.target.value)})} placeholder="1.000.000"/>{weddingForm.initialPayment&&<em>{rp(weddingForm.initialPayment)}</em>}</Field> : <div className="editPaymentHint"><small>PEMBAYARAN</small><b>{rp(totalPayments(weddings.find((w)=>w.id===weddingForm.id)||{}))}</b><span>Riwayat pembayaran tetap dikelola dari Detail Wedding.</span></div>}
               </div>
             </section>
 
@@ -1426,8 +1476,8 @@ export default function Page() {
                     <Field label="Kategori"><input value={item.category||""} onChange={(e)=>updateWeddingDraftItem(index,{category:e.target.value})} placeholder="Dekorasi / Foto / Crew"/></Field>
                   </div>
                   <div className="formTwoCols">
-                    <Field label="Biaya Aktual"><input type="number" inputMode="numeric" min="0" value={item.actualCost??""} onChange={(e)=>updateWeddingDraftItem(index,{actualCost:e.target.value})} placeholder="5000000"/>{item.actualCost&&<em>{rp(item.actualCost)}</em>}</Field>
-                    {Array.isArray(item.vendorPayments)&&item.vendorPayments.length>0 ? <div className="editPaymentHint"><small>SUDAH DIBAYAR VENDOR</small><b>{rp(vendorPaid(item))}</b><span>Kelola riwayat pembayaran dari Detail Wedding.</span></div> : <Field label="Pembayaran Awal Vendor"><input type="number" inputMode="numeric" min="0" value={item.paidAmount??""} onChange={(e)=>updateWeddingDraftItem(index,{paidAmount:e.target.value})} placeholder="0"/>{item.paidAmount&&<em>{rp(item.paidAmount)}</em>}</Field>}
+                    <Field label="Biaya Aktual"><input type="text" inputMode="numeric" value={formatMoneyInput(item.actualCost)} onChange={(e)=>updateWeddingDraftItem(index,{actualCost:onlyDigits(e.target.value)})} placeholder="5.000.000"/>{item.actualCost&&<em>{rp(item.actualCost)}</em>}</Field>
+                    {Array.isArray(item.vendorPayments)&&item.vendorPayments.length>0 ? <div className="editPaymentHint"><small>SUDAH DIBAYAR VENDOR</small><b>{rp(vendorPaid(item))}</b><span>Kelola riwayat pembayaran dari Detail Wedding.</span></div> : <Field label="Pembayaran Awal Vendor"><input type="text" inputMode="numeric" value={formatMoneyInput(item.paidAmount)} onChange={(e)=>updateWeddingDraftItem(index,{paidAmount:onlyDigits(e.target.value)})} placeholder="0"/>{item.paidAmount&&<em>{rp(item.paidAmount)}</em>}</Field>}
                   </div>
                   <Field label="Catatan Item"><input value={item.notes||""} onChange={(e)=>updateWeddingDraftItem(index,{notes:e.target.value})} placeholder="DP 50%, pelunasan H-3, dll."/></Field>
                 </div>)}
@@ -1448,7 +1498,7 @@ export default function Page() {
             <ModalClose onClick={()=>setPaymentOpen(false)}/><small>PEMBAYARAN KLIEN</small><h3>{paymentEditId?"Edit Pembayaran":"Catat Pembayaran"}</h3>
             <Field label="Tahap / Nama Pembayaran"><input value={paymentLabel} onChange={(e)=>setPaymentLabel(e.target.value)} placeholder="DP / Cicilan 2 / Pelunasan"/></Field>
             <div className="formTwoCols">
-              <Field label="Nominal Masuk"><input type="number" inputMode="numeric" min="0" value={paymentAmount} onChange={(e)=>setPaymentAmount(e.target.value)} placeholder="2000000"/>{paymentAmount&&<em>{rp(paymentAmount)}</em>}</Field>
+              <Field label="Nominal Masuk"><input type="text" inputMode="numeric" value={formatMoneyInput(paymentAmount)} onChange={(e)=>setPaymentAmount(onlyDigits(e.target.value))} placeholder="2.000.000"/>{paymentAmount&&<em>{rp(paymentAmount)}</em>}</Field>
               <Field label="Tanggal"><input type="date" value={paymentDate} onChange={(e)=>setPaymentDate(e.target.value)}/></Field>
             </div>
             <Field label="Catatan"><textarea rows={2} value={paymentNote} onChange={(e)=>setPaymentNote(e.target.value)} placeholder="Transfer BCA / cash / keterangan lain"/></Field>
@@ -1463,7 +1513,7 @@ export default function Page() {
             <ModalClose onClick={()=>setVendorPaymentOpen(false)}/><small>PEMBAYARAN VENDOR</small><h3>{vendorPaymentEditId?"Edit Pembayaran Vendor":"Catat Pembayaran Vendor"}</h3>
             <Field label="Tahap / Nama Pembayaran"><input value={vendorPaymentLabel} onChange={(e)=>setVendorPaymentLabel(e.target.value)} placeholder="DP Vendor / Cicilan / Pelunasan"/></Field>
             <div className="formTwoCols">
-              <Field label="Nominal Dibayar"><input type="number" inputMode="numeric" min="0" value={vendorPaymentAmount} onChange={(e)=>setVendorPaymentAmount(e.target.value)} placeholder="2000000"/>{vendorPaymentAmount&&<em>{rp(vendorPaymentAmount)}</em>}</Field>
+              <Field label="Nominal Dibayar"><input type="text" inputMode="numeric" value={formatMoneyInput(vendorPaymentAmount)} onChange={(e)=>setVendorPaymentAmount(onlyDigits(e.target.value))} placeholder="2.000.000"/>{vendorPaymentAmount&&<em>{rp(vendorPaymentAmount)}</em>}</Field>
               <Field label="Tanggal"><input type="date" value={vendorPaymentDate} onChange={(e)=>setVendorPaymentDate(e.target.value)}/></Field>
             </div>
             <Field label="Catatan"><textarea rows={2} value={vendorPaymentNote} onChange={(e)=>setVendorPaymentNote(e.target.value)} placeholder="Transfer / cash / keterangan lain"/></Field>
@@ -1479,8 +1529,8 @@ export default function Page() {
             <Field label="Pilih Vendor (opsional)"><select value={packageForm.vendorId} onChange={(e)=>chooseVendor(e.target.value)}><option value="">— Input manual / biaya lain —</option>{vendors.map((v)=><option key={v.id} value={v.id}>{v.name} · {v.category}</option>)}</select><em>Harga referensi hanya membantu mengisi awal dan tetap bisa diubah.</em></Field>
             <Field label="Nama Item / Vendor"><input value={packageForm.name} onChange={(e)=>setPackageForm({...packageForm,name:e.target.value})} placeholder="Dekorasi / Foto Video / Transport"/></Field>
             <Field label="Kategori"><input value={packageForm.category} onChange={(e)=>setPackageForm({...packageForm,category:e.target.value})} placeholder="Dekorasi / Foto / Crew / Lainnya"/></Field>
-            <Field label="Biaya Aktual Wedding Ini"><input type="number" inputMode="numeric" min="0" value={packageForm.actualCost} onChange={(e)=>setPackageForm({...packageForm,actualCost:e.target.value})} placeholder="5000000"/></Field>
-            {packageForm.id ? <div className="editPaymentHint"><small>SUDAH DIBAYAR VENDOR</small><b>{rp(vendorPaid(packageForm))}</b><span>Riwayat pembayaran dikelola dari Detail Wedding.</span></div> : <Field label="Pembayaran Awal Vendor"><input type="number" inputMode="numeric" min="0" value={packageForm.paidAmount} onChange={(e)=>setPackageForm({...packageForm,paidAmount:e.target.value})} placeholder="0"/><em>Setelah disimpan, pembayaran berikutnya dicatat sebagai riwayat.</em></Field>}
+            <Field label="Biaya Aktual Wedding Ini"><input type="text" inputMode="numeric" value={formatMoneyInput(packageForm.actualCost)} onChange={(e)=>setPackageForm({...packageForm,actualCost:onlyDigits(e.target.value)})} placeholder="5.000.000"/></Field>
+            {packageForm.id ? <div className="editPaymentHint"><small>SUDAH DIBAYAR VENDOR</small><b>{rp(vendorPaid(packageForm))}</b><span>Riwayat pembayaran dikelola dari Detail Wedding.</span></div> : <Field label="Pembayaran Awal Vendor"><input type="text" inputMode="numeric" value={formatMoneyInput(packageForm.paidAmount)} onChange={(e)=>setPackageForm({...packageForm,paidAmount:onlyDigits(e.target.value)})} placeholder="0"/><em>Setelah disimpan, pembayaran berikutnya dicatat sebagai riwayat.</em></Field>}
             <Field label="Catatan"><textarea rows={3} value={packageForm.notes} onChange={(e)=>setPackageForm({...packageForm,notes:e.target.value})} placeholder="DP 50%, pelunasan H-3, kebutuhan khusus, dll."/></Field>
             <button className="primary full" type="submit"><CheckCircle2 size={18}/> Simpan Item</button>
           </form>
@@ -1492,7 +1542,7 @@ export default function Page() {
           <form className="smallForm" onSubmit={savePackageMaster}>
             <ModalClose onClick={()=>setPackageMasterOpen(false)}/><small>MASTER HARGA</small><h3>{packageMasterForm.id?"Edit Paket":"Tambah Paket"}</h3>
             <Field label="Nama Paket"><input value={packageMasterForm.name} onChange={(e)=>setPackageMasterForm({...packageMasterForm,name:e.target.value})} placeholder="Paket Akad / Wedding / Premium"/></Field>
-            <Field label="Harga Default"><input type="number" inputMode="numeric" min="0" value={packageMasterForm.price} onChange={(e)=>setPackageMasterForm({...packageMasterForm,price:e.target.value})} placeholder="8000000"/>{packageMasterForm.price&&<em>{rp(packageMasterForm.price)}</em>}</Field>
+            <Field label="Harga Default"><input type="text" inputMode="numeric" value={formatMoneyInput(packageMasterForm.price)} onChange={(e)=>setPackageMasterForm({...packageMasterForm,price:onlyDigits(e.target.value)})} placeholder="8.000.000"/>{packageMasterForm.price&&<em>{rp(packageMasterForm.price)}</em>}</Field>
             <Field label="Keterangan"><textarea rows={3} value={packageMasterForm.notes} onChange={(e)=>setPackageMasterForm({...packageMasterForm,notes:e.target.value})} placeholder="Isi singkat paket / catatan harga"/></Field>
             <button className="primary full" type="submit"><CheckCircle2 size={18}/> Simpan Master Harga</button>
           </form>
@@ -1507,7 +1557,7 @@ export default function Page() {
             <Field label="Kategori"><input value={vendorForm.category} onChange={(e)=>setVendorForm({...vendorForm,category:e.target.value})} placeholder="Dekorasi / Foto / Catering"/></Field>
             <Field label="Nomor WhatsApp"><input inputMode="tel" value={vendorForm.whatsapp} onChange={(e)=>setVendorForm({...vendorForm,whatsapp:e.target.value})} placeholder="081234567890"/></Field>
             <Field label="Alamat"><input value={vendorForm.address} onChange={(e)=>setVendorForm({...vendorForm,address:e.target.value})} placeholder="Jepara / alamat vendor"/></Field>
-            <Field label="Harga Referensi"><input type="number" inputMode="numeric" min="0" value={vendorForm.referencePrice} onChange={(e)=>setVendorForm({...vendorForm,referencePrice:e.target.value})} placeholder="5000000"/><em>Harga ini bukan harga tetap. Bisa diubah saat vendor dipakai di wedding.</em></Field>
+            <Field label="Harga Referensi"><input type="text" inputMode="numeric" value={formatMoneyInput(vendorForm.referencePrice)} onChange={(e)=>setVendorForm({...vendorForm,referencePrice:onlyDigits(e.target.value)})} placeholder="5.000.000"/><em>Harga ini bukan harga tetap. Bisa diubah saat vendor dipakai di wedding.</em></Field>
             <Field label="Catatan"><textarea rows={3} value={vendorForm.notes} onChange={(e)=>setVendorForm({...vendorForm,notes:e.target.value})} placeholder="PIC, ketentuan DP, layanan, dll."/></Field>
             <button className="primary full" type="submit"><CheckCircle2 size={18}/> Simpan Vendor</button>
           </form>
@@ -1594,12 +1644,12 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
     </section>
 
     <section className="panel">
-      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal mengikuti Harga Deal. Jika DP diubah manual, sisa DP berikutnya dan pelunasan langsung dihitung otomatis.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
+      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal mengikuti Harga Deal. DP manual dan setiap cicilan/catatan pembayaran masuk otomatis mengurangi sisa DP berikutnya sampai pelunasan.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
       <div className="paymentScheduleList">
         {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
           <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={stage.paid?"Sudah dibayar":"Belum dibayar"}>{stage.paid?<CheckCircle2 size={22}/>:<span/>}</button>
           <div className="paymentStageMain"><b>{stage.label}</b><span>{stage.dueDate?`Jatuh tempo ${formatDate(stage.dueDate)}`:(stage.key==="dp1"?"Saat booking tanggal":"Tanggal dapat disesuaikan")}</span><em>{stage.paid?`Sudah dibayar${stage.paidDate?` · ${formatDate(stage.paidDate)}`:""}`:"Belum dibayar"}</em></div>
-          <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<input type="number" min="0" value={stage.amount ?? ""} onChange={(e)=>onUpdatePaymentStage(stage.key,{amount:Number(e.target.value||0)})}/>}</div>
+          <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<input type="text" inputMode="numeric" value={formatMoneyInput(stage.amount)} onChange={(e)=>onUpdatePaymentStage(stage.key,{amount:parseMoney(e.target.value)})} placeholder="0"/>}</div>
         </div>)}
       </div>
       <div className="paymentScheduleSummary"><div><small>Terbayar dari Jadwal</small><b>{rp(scheduledPaid)}</b></div><div><small>Total Uang Masuk</small><b>{rp(f.incoming)}</b></div><div><small>Sisa Tagihan</small><b>{rp(f.remaining)}</b></div></div>
