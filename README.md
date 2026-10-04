@@ -1,23 +1,10 @@
-# AYNIS Wedding Manager V4.1 — Team Roles
+# AYNIS Wedding Manager V4.3 — Admin Save & Multi-user Sync
 
-V4.1 menambahkan workspace bersama dan role Owner/Admin/Staff di atas Supabase Cloud.
+Perbaikan V4.3:
+- Admin dapat menambah dan menyimpan Wedding baru.
+- Simpan Wedding menulis langsung ke Supabase sebelum form ditutup.
+- Sinkronisasi realtime Owner/Admin untuk mengurangi data tertimpa antar perangkat.
+- Finance Lock V4.2 tetap berlaku: Admin tidak melihat menu Keuangan/profit.
+- Owner tetap memiliki akses penuh.
 
-## Role
-- Owner: akses penuh dan Manajemen Pengguna.
-- Admin: mengelola data operasional, tidak dapat mengelola pengguna/Owner.
-- Staff: read-only.
-
-## Cara menambahkan Admin
-1. Owner login seperti biasa.
-2. Klik avatar **AA** > Tim Aynis.
-3. Masukkan email admin, pilih Admin, lalu Tambah Pengguna.
-4. Admin membuka URL Aynis yang sama, memilih Buat / Aktivasi Akun dengan email undangan, lalu membuat password.
-5. Setelah login, role diterapkan otomatis.
-
-Database utama tetap Supabase. Jangan taruh secret/service role key di browser atau NEXT_PUBLIC env.
-
-## V4.2 Team Access
-- Owner: full access including Finance and Team management.
-- Admin: operational editing only; business finance summary/profit is hidden.
-- Staff: read-only.
-- Finance tab is visible only to Owner or members explicitly granted view_finance.
+Upload seluruh isi project ke repository `aynis-wedding-manager`, commit ke `main`, lalu Vercel akan deploy otomatis.

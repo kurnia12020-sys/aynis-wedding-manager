@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Home,
   HeartHandshake,
@@ -178,6 +178,7 @@ export default function Page() {
   const [authBusy, setAuthBusy] = useState(false);
   const [selectedWeddingId, setSelectedWeddingId] = useState(null);
   const [membership, setMembership] = useState(null);
+  const applyingRemoteRef = useRef(false);
   const [workspaceId, setWorkspaceId] = useState(null);
   const [members, setMembers] = useState([]);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -416,12 +417,16 @@ export default function Page() {
     if (!cloudReady || !session?.user?.id || !workspaceId || !supabase) return;
     const canEdit = membership?.role === "owner" || membership?.role === "admin";
     if (!canEdit) return;
+    if (applyingRemoteRef.current) {
+      applyingRemoteRef.current = false;
+      return;
+    }
     const timer = setTimeout(async () => {
       const { error } = await supabase.from("app_state").update({
         weddings,
         vendors,
         packages,
-        schema_version: 41,
+        schema_version: 43,
         updated_at: new Date().toISOString(),
       }).eq("workspace_id", workspaceId);
       if (error) {
@@ -431,9 +436,31 @@ export default function Page() {
       } else {
         setCloudState("online");
       }
-    }, 500);
+    }, 650);
     return () => clearTimeout(timer);
   }, [weddings, vendors, packages, cloudReady, session, workspaceId, membership]);
+
+  useEffect(() => {
+    if (!cloudReady || !workspaceId || !supabase) return;
+    const channel = supabase
+      .channel(`aynis-app-state-${workspaceId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "app_state", filter: `workspace_id=eq.${workspaceId}` },
+        (payload) => {
+          const next = payload.new || {};
+          applyingRemoteRef.current = true;
+          if (Array.isArray(next.weddings)) setWeddings(next.weddings);
+          if (Array.isArray(next.vendors)) setVendors(next.vendors);
+          if (Array.isArray(next.packages)) setPackages(next.packages);
+          setCloudState("online");
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [cloudReady, workspaceId]);
 
   useEffect(() => {
     if (!cloudReady) return;
@@ -569,7 +596,7 @@ export default function Page() {
     setWeddingOpen(true);
   }
 
-  function saveWedding(event) {
+  async function saveWedding(event) {
     event.preventDefault();
     try {
     const dealPrice = Number(weddingForm.dealPrice || 0);
@@ -632,10 +659,36 @@ export default function Page() {
       record.payments = [{ id: Date.now() + 1, label: "DP / Pembayaran Awal", amount: initialPayment, date: new Date().toISOString().slice(0, 10), notes: "" }];
     }
 
-    setWeddings((current) => {
-      const exists = current.some((w) => w.id === record.id);
-      return exists ? current.map((w) => (w.id === record.id ? record : w)) : [record, ...current];
-    });
+    let nextWeddings = null;
+    if (cloudReady && workspaceId && supabase && (membership?.role === "owner" || membership?.role === "admin")) {
+      setCloudState("saving");
+      setCloudMessage("Menyimpan wedding ke cloud…");
+      const { data: latest, error: latestError } = await supabase
+        .from("app_state")
+        .select("weddings")
+        .eq("workspace_id", workspaceId)
+        .single();
+      if (latestError) throw latestError;
+      const cloudWeddings = Array.isArray(latest?.weddings) ? latest.weddings : [];
+      const exists = cloudWeddings.some((w) => w.id === record.id);
+      nextWeddings = exists
+        ? cloudWeddings.map((w) => (w.id === record.id ? record : w))
+        : [record, ...cloudWeddings.filter((w) => w.id !== record.id)];
+      const { error: saveError } = await supabase
+        .from("app_state")
+        .update({ weddings: nextWeddings, schema_version: 43, updated_at: new Date().toISOString() })
+        .eq("workspace_id", workspaceId);
+      if (saveError) throw saveError;
+      setCloudState("online");
+      setCloudMessage("Wedding tersimpan ke cloud.");
+    } else {
+      nextWeddings = (() => {
+        const exists = weddings.some((w) => w.id === record.id);
+        return exists ? weddings.map((w) => (w.id === record.id ? record : w)) : [record, ...weddings];
+      })();
+    }
+
+    setWeddings(nextWeddings);
 
     const selected = new Date(`${record.date}T00:00:00`);
     setMonth(selected.getMonth());
@@ -1024,7 +1077,7 @@ export default function Page() {
   }
 
   if (!session) {
-    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.2 TEAM</small><h1>{authMode === "signup" ? "Buat / Aktivasi Akun" : "Masuk ke Aynis"}</h1><p>Owner, Admin, dan Staff masuk dari link yang sama. Hak akses mengikuti akun masing-masing.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
+    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.3 TEAM</small><h1>{authMode === "signup" ? "Buat / Aktivasi Akun" : "Masuk ke Aynis"}</h1><p>Owner, Admin, dan Staff masuk dari link yang sama. Hak akses mengikuti akun masing-masing.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
   }
 
   if (cloudState === "no-access") {
@@ -1075,7 +1128,7 @@ export default function Page() {
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.2 TEAM ACCESS</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.3 TEAM ACCESS</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
         <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
