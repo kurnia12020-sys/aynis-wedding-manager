@@ -122,6 +122,32 @@ function defaultPaymentSchedule(wedding, existing = null) {
   });
 }
 
+
+function recalculateFollowingPayments(wedding, schedule, changedKey) {
+  const deal = Number(wedding?.dealPrice || 0);
+  const target30 = Math.round(deal * 0.3);
+  const target70 = Math.round(deal * 0.7);
+  const next = schedule.map((item) => ({ ...item, amount: Number(item.amount || 0) }));
+  const byKey = Object.fromEntries(next.map((item) => [item.key, item]));
+
+  const dp1 = Number(byKey.dp1?.amount || 0);
+  if (changedKey === "dp1") {
+    byKey.dp2.amount = Math.max(target30 - dp1, 0);
+  }
+
+  const dp2 = Number(byKey.dp2?.amount || 0);
+  if (["dp1", "dp2"].includes(changedKey)) {
+    byKey.dp3.amount = Math.max(target70 - dp1 - dp2, 0);
+  }
+
+  const dp3 = Number(byKey.dp3?.amount || 0);
+  if (["dp1", "dp2", "dp3"].includes(changedKey)) {
+    byKey.final.amount = Math.max(deal - dp1 - dp2 - dp3, 0);
+  }
+
+  return next;
+}
+
 function scheduledPaidTotal(wedding) {
   return (wedding.paymentSchedule || []).reduce((sum, item) => sum + (item.paid ? Number(item.amount || 0) : 0), 0);
 }
@@ -852,7 +878,11 @@ export default function Page() {
     setWeddings((current) => current.map((w) => {
       if (String(w.id) !== String(weddingId)) return w;
       const schedule = defaultPaymentSchedule(w, w.paymentSchedule);
-      return { ...w, paymentSchedule: schedule.map((item) => item.key === stageKey ? { ...item, ...patch } : item) };
+      let updated = schedule.map((item) => item.key === stageKey ? { ...item, ...patch } : item);
+      if (Object.prototype.hasOwnProperty.call(patch, "amount")) {
+        updated = recalculateFollowingPayments(w, updated, stageKey);
+      }
+      return { ...w, paymentSchedule: updated };
     }));
   }
 
@@ -1564,7 +1594,7 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
     </section>
 
     <section className="panel">
-      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal otomatis mengikuti Harga Deal, tetapi Owner dan Admin tetap dapat mengubah nominal sesuai kesepakatan.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
+      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal mengikuti Harga Deal. Jika DP diubah manual, sisa DP berikutnya dan pelunasan langsung dihitung otomatis.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
       <div className="paymentScheduleList">
         {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
           <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={stage.paid?"Sudah dibayar":"Belum dibayar"}>{stage.paid?<CheckCircle2 size={22}/>:<span/>}</button>
