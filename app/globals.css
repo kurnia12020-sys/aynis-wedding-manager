@@ -95,3 +95,70 @@
 
 /* V4.20 Checklist & Timeline */
 .checklistPanel{overflow:hidden}.checkProgress{display:grid;justify-items:end;gap:2px;min-width:88px}.checkProgress b{font-size:22px;color:#7c5138}.checkProgress span{font-size:12px;color:#8f7b6e}.checkProgressBar{height:8px;background:#eee4dc;border-radius:999px;overflow:hidden;margin:2px 0 18px}.checkProgressBar span{display:block;height:100%;background:linear-gradient(90deg,#9a6a4a,#6f8b63);border-radius:999px;transition:width .2s ease}.timelineList{display:grid;gap:10px}.timelineItem{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:flex-start;padding:13px 14px;border:1px solid #eadfd6;border-radius:14px;background:#fff}.timelineItem.done{background:#f6faf4;border-color:#d7e5d0}.timelineItem.overdue{background:#fff6f3;border-color:#efc5b7}.timelineCheck{width:30px;height:30px;border-radius:50%;border:1px solid #cdbbad;background:#fff;display:grid;place-items:center;padding:0;color:#fff}.timelineCheck:not(:disabled){cursor:pointer}.timelineCheck.checked{background:#6f8b63;border-color:#6f8b63}.timelineCheck:disabled:not(.checked){background:#f3ede8;opacity:.75}.timelineCheck span{width:11px;height:11px;border-radius:50%;background:#d8c9be}.timelineBody{display:grid;gap:4px}.timelineTitle{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.timelineTitle b{font-size:15px}.timelineTitle em,.timelineTitle i{font-size:10px;font-style:normal;text-transform:uppercase;letter-spacing:.06em;padding:3px 7px;border-radius:999px}.timelineTitle em{background:#efe8ff;color:#6a5292}.timelineTitle i{background:#ffe1d9;color:#a9472d}.timelineBody>span{font-size:13px;color:#786b62}.timelineBody>small{font-size:12px;color:#9a6a4a;font-weight:700}@media(max-width:640px){.checklistPanel .compactHeader{align-items:flex-start}.checkProgress{justify-items:start;margin-top:8px}.timelineItem{padding:12px}.timelineBody>span{line-height:1.35}}
+
+/* V4.21 - Modern Bridal Premium Visual Refresh */
+:root{
+  --ivory:#fbf8f5;
+  --porcelain:#fffdfb;
+  --blush:#f3e7e5;
+  --rose:#b98585;
+  --rose-deep:#8f6267;
+  --mauve:#7f6878;
+  --mocha:#5f4a43;
+  --espresso:#342925;
+  --champagne:#c7a978;
+  --sage:#6f8b78;
+  --success:#3f7a57;
+  --danger:#a55358;
+  --line:#e9ddd7;
+  --muted:#83746d;
+  --shadow:0 14px 36px rgba(76,55,49,.09);
+}
+html,body{background:linear-gradient(180deg,#fcfaf8 0%,#f7f1ee 100%);color:var(--espresso)}
+body{font-family:Arial,Helvetica,sans-serif}
+main{max-width:1000px}
+.eyebrow,small{color:#a57e79}
+h1,h2,.panelHeader h2,.financeIntro h2,.detailHero h2,.clientDocBox h3{letter-spacing:-.015em}
+h1 span{color:#aa807b}
+.avatar{background:linear-gradient(145deg,#7f6878,#5f4a43);box-shadow:0 8px 20px rgba(95,74,67,.18)}
+.hero{background:linear-gradient(135deg,rgba(255,253,251,.98),rgba(246,233,231,.94));border-color:#ead8d5;box-shadow:var(--shadow)}
+.hero:before{content:"";position:absolute;pointer-events:none}
+.primary{background:linear-gradient(135deg,#936c70,#7f6878);box-shadow:0 8px 18px rgba(127,104,120,.18);transition:.18s ease}
+.primary:hover{transform:translateY(-1px);filter:brightness(1.02)}
+.card,.panel,.list article,.vendorCard,.expenseRow,.paymentRow,.financeRow,.timelineItem{background:rgba(255,253,251,.97);border-color:var(--line);box-shadow:0 7px 20px rgba(76,55,49,.045)}
+.card.highlight,.miniStat.strong{background:linear-gradient(135deg,#fffaf8,#f4e8e5);border-color:#dec8c3}
+.card span,.grow p,.vendorGrow span,.expenseMain span,.paymentRow span,.financeRow span,.timelineBody>span{color:var(--muted)}
+.sectionHead b,.linkButton{color:#936c70}
+.datebox,.vendorIcon{background:linear-gradient(135deg,#f5e9e7,#eee2e4);color:#8f6267}
+.bar{background:#eee5e1}.bar i{background:linear-gradient(90deg,#b98585,#8f6267)}
+.statusBadge,.bigStatus,.vendorStatus{background:#f7ece4;color:#8b6248}
+.statusBadge.paid,.bigStatus.paid,.vendorStatus.paid{background:#eaf4ed;color:#3e7250}
+.rowActions button,.vendorActions button,.iconActions button,.detailTopActions button,.softButton{border-color:#e5d7d2;background:#fffaf8;color:#70565a}
+.rowActions button:hover,.vendorActions button:hover,.iconActions button:hover,.detailTopActions button:hover,.softButton:hover{background:#f6eceb}
+.panel{box-shadow:var(--shadow)}
+.emptyState{border-color:#decfca;background:rgba(255,253,251,.75)}
+.calendarControls select,.monthButton,.modal input,.modal textarea,.modal select,.receiptSelectLabel select,.monthlyReportControl input{border-color:#e0d2cd;background:#fffdfb;color:#5f4a43}
+.calendarCell{background:#fffdfb;border-color:#eaded9}.calendarCell.blank{background:#faf6f4}.calendarCell.today{border-color:#b98585;background:#fff7f6}
+.calendarEvent{background:#f1e4e5;color:#795b62}
+.referencePrice{color:#7f5e55}
+nav{background:linear-gradient(135deg,#3a302d,#51413f);box-shadow:0 18px 40px rgba(44,34,31,.28);border:1px solid rgba(255,255,255,.06)}
+nav button{color:#c9bbb6}nav button.active{background:linear-gradient(135deg,#8f6267,#7f6878);color:#fff;box-shadow:0 6px 14px rgba(127,104,120,.22)}
+.modal{background:rgba(38,29,27,.48);backdrop-filter:blur(5px)}
+.modal form,.clientDocBox{background:#fffdfb;border:1px solid #eee3de;box-shadow:0 24px 70px rgba(49,36,32,.18)}
+.close{background:#f5ece9;color:#755b58}
+.infoLines span,.infoLines button{background:#f7f0ed;color:#6f5852}
+.miniStat{background:#fbf6f4;border-color:#ece0dc}
+.positive{color:#3f7a57}.negative,.danger,.iconActions button.danger,.detailTopActions button.danger,.iconDanger{color:#a55358!important}
+.paymentStage,.addonCard,.reminderRow,.monthlyReportRow{border-color:#eaded9;background:#fffdfb}
+.saveStageButton{background:linear-gradient(135deg,#8f6267,#73585e)}
+.weddingSearchBox{border-color:#ead8d5;background:#fffaf9;color:#986f73}.searchClear{background:#f2e5e4;color:#805f64}
+.addonTotalBar{background:linear-gradient(135deg,#f7ece8,#f3e5e6);border-color:#dfcac6}.addonTotalBar span{color:#76565b}
+.checkLine{border-color:#e9dcd7;background:#fffaf8}
+.clientDocsPanel,.reminderPanel,.monthlyOwnerReport{border-color:#dfcbc7;background:linear-gradient(135deg,#fffdfb,#faf1ef)}
+.waDocButton{background:linear-gradient(135deg,#56856a,#3f7658)}
+.reminderCount{background:#f1e4e4;color:#7f5d62}.reminderMain strong{color:#75575c}.reminderBadge.soon,.stageReminder.soon{background:#f3e8e4;color:#7d5e58}
+.checkProgress b{color:#805d63}.checkProgressBar{background:#eee5e1}.checkProgressBar span{background:linear-gradient(90deg,#b98585,#8f6267,#7b8e7e)}
+.timelineItem.done{background:#f6faf6;border-color:#d8e5db}.timelineItem.overdue{background:#fff7f6;border-color:#e8c9c4}.timelineCheck.checked{background:#6f8b78;border-color:#6f8b78}.timelineBody>small{color:#936c70}
+.timelineTitle em{background:#f0e8f0;color:#745e75}.timelineTitle i{background:#f8e3df;color:#a45249}
+button{transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
+@media(max-width:760px){main{padding-left:14px;padding-right:14px}.hero,.panel{border-radius:22px}.card{border-radius:17px}nav{bottom:12px;width:min(94%,700px)}}

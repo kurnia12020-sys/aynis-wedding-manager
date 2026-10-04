@@ -23,3 +23,7 @@ Upload seluruh isi project ke repository `aynis-wedding-manager`, commit ke `mai
 - Cashback / Potongan per Wedding
 - Harga Deal Bersih untuk jadwal DP, sisa tagihan, dan estimasi profit
 - Konfirmasi sebelum menyimpan setiap pengeditan data yang sudah ada
+
+
+## V4.21 Visual Refresh
+Modern bridal premium palette: ivory, dusty rose, soft mauve, mocha, champagne accent. No business logic changes.
