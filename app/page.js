@@ -23,7 +23,11 @@ import {
   Phone,
   Calendar,
   TrendingUp,
+  Cloud,
+  LogOut,
 } from "lucide-react";
+
+import { supabase, supabaseConfigured } from "../lib/cloud";
 
 const WEDDING_KEY = "aynis-finance-flow-weddings-v3";
 const VENDOR_KEY = "aynis-finance-flow-vendors-v3";
@@ -161,6 +165,14 @@ export default function Page() {
   const [vendors, setVendors] = useState([]);
   const [packages, setPackages] = useState([]);
   const [ready, setReady] = useState(false);
+  const [session, setSession] = useState(null);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudState, setCloudState] = useState("connecting");
+  const [cloudMessage, setCloudMessage] = useState("");
+  const [authMode, setAuthMode] = useState("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
   const [selectedWeddingId, setSelectedWeddingId] = useState(null);
 
   const [weddingOpen, setWeddingOpen] = useState(false);
@@ -196,22 +208,24 @@ export default function Page() {
   const [month, setMonth] = useState(today.getMonth());
   const [year, setYear] = useState(today.getFullYear());
 
-  useEffect(() => {
+  function readLocalSnapshot() {
+    let localWeddings = [];
+    let localVendors = [];
+    let localPackages = [];
     try {
       const currentRaw = localStorage.getItem(WEDDING_KEY);
       if (currentRaw) {
         const parsed = JSON.parse(currentRaw);
-        if (Array.isArray(parsed)) setWeddings(parsed);
+        if (Array.isArray(parsed)) localWeddings = parsed;
       } else {
         const oldRaw =
           localStorage.getItem("aynis-weddings-v3") ||
           localStorage.getItem("aynis-wedding-manager-weddings-v2") ||
           localStorage.getItem("aynis-wedding-manager-weddings-v1");
-
         if (oldRaw) {
           const parsed = JSON.parse(oldRaw);
           if (Array.isArray(parsed)) {
-            const migrated = parsed.map((x, index) => {
+            localWeddings = parsed.map((x, index) => {
               const deal = Number(x.dealPrice ?? x.value ?? x.booking ?? 0);
               const oldPaid = Number(x.paid ?? 0);
               return {
@@ -229,7 +243,6 @@ export default function Page() {
                 createdAt: x.createdAt || new Date().toISOString(),
               };
             });
-            setWeddings(migrated);
           }
         }
       }
@@ -237,14 +250,14 @@ export default function Page() {
       const packageRaw = localStorage.getItem(PACKAGE_KEY);
       if (packageRaw) {
         const parsed = JSON.parse(packageRaw);
-        if (Array.isArray(parsed)) setPackages(parsed);
+        if (Array.isArray(parsed)) localPackages = parsed;
       }
 
       const vendorRaw = localStorage.getItem(VENDOR_KEY) || localStorage.getItem("aynis-vendors-v1");
       if (vendorRaw) {
         const parsed = JSON.parse(vendorRaw);
         if (Array.isArray(parsed)) {
-          setVendors(parsed.map((v) => ({
+          localVendors = parsed.map((v) => ({
             id: v.id || Date.now() + Math.random(),
             name: v.name || "",
             category: v.category || "",
@@ -252,30 +265,180 @@ export default function Page() {
             address: v.address || "",
             referencePrice: Number(v.referencePrice || 0),
             notes: v.notes || "",
-          })));
+          }));
         }
       }
     } catch (error) {
       console.error("Gagal membaca data lokal", error);
-    } finally {
+    }
+    return { weddings: localWeddings, vendors: localVendors, packages: localPackages };
+  }
+
+  async function bootCloud(activeSession = null) {
+    if (!supabaseConfigured || !supabase) {
+      setCloudState("needs-config");
+      setReady(true);
+      return;
+    }
+    setCloudState("connecting");
+    setCloudMessage("");
+    setCloudReady(false);
+    try {
+      let currentSession = activeSession;
+      if (!currentSession) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        currentSession = data.session;
+      }
+      setSession(currentSession);
+      if (!currentSession?.user) {
+        setCloudState("signed-out");
+        setReady(true);
+        return;
+      }
+
+      const userId = currentSession.user.id;
+      const { data, error } = await supabase
+        .from("app_state")
+        .select("weddings,vendors,packages,schema_version,updated_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) throw error;
+
+      if (data) {
+        setWeddings(Array.isArray(data.weddings) ? data.weddings : []);
+        setVendors(Array.isArray(data.vendors) ? data.vendors : []);
+        setPackages(Array.isArray(data.packages) ? data.packages : []);
+        setCloudMessage("Data cloud tersambung.");
+      } else {
+        const local = readLocalSnapshot();
+        const { error: insertError } = await supabase.from("app_state").insert({
+          user_id: userId,
+          weddings: local.weddings,
+          vendors: local.vendors,
+          packages: local.packages,
+          schema_version: 4,
+          updated_at: new Date().toISOString(),
+        });
+        if (insertError) throw insertError;
+        setWeddings(local.weddings);
+        setVendors(local.vendors);
+        setPackages(local.packages);
+        setCloudMessage(
+          local.weddings.length || local.vendors.length || local.packages.length
+            ? "Data lama dari perangkat ini sudah dipindahkan ke Supabase."
+            : "Database cloud baru siap digunakan."
+        );
+      }
+      setCloudReady(true);
+      setCloudState("online");
+      setReady(true);
+    } catch (error) {
+      console.error(error);
+      setCloudState("error");
+      setCloudMessage(error.message || "Gagal menghubungkan Supabase.");
       setReady(true);
     }
+  }
+
+  useEffect(() => {
+    if (!supabaseConfigured || !supabase) {
+      setCloudState("needs-config");
+      setReady(true);
+      return;
+    }
+    bootCloud();
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (event === "SIGNED_IN" && nextSession) bootCloud(nextSession);
+      if (event === "SIGNED_OUT") {
+        setWeddings([]);
+        setVendors([]);
+        setPackages([]);
+        setSelectedWeddingId(null);
+        setCloudReady(false);
+        setCloudState("signed-out");
+        setReady(true);
+      }
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!cloudReady || !session?.user?.id || !supabase) return;
+    const timer = setTimeout(async () => {
+      const { error } = await supabase.from("app_state").upsert({
+        user_id: session.user.id,
+        weddings,
+        vendors,
+        packages,
+        schema_version: 4,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) {
+        console.error("Gagal sinkron Supabase", error);
+        setCloudState("error");
+        setCloudMessage("Perubahan belum tersimpan ke cloud. Coba cek koneksi internet.");
+      } else {
+        setCloudState("online");
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [weddings, vendors, packages, cloudReady, session]);
+
+  useEffect(() => {
+    if (!cloudReady) return;
     localStorage.setItem(WEDDING_KEY, JSON.stringify(weddings));
-  }, [weddings, ready]);
-
-  useEffect(() => {
-    if (!ready) return;
     localStorage.setItem(VENDOR_KEY, JSON.stringify(vendors));
-  }, [vendors, ready]);
-
-  useEffect(() => {
-    if (!ready) return;
     localStorage.setItem(PACKAGE_KEY, JSON.stringify(packages));
-  }, [packages, ready]);
+  }, [weddings, vendors, packages, cloudReady]);
+
+  async function handleAuth(event) {
+    event.preventDefault();
+    if (!supabase) return;
+    if (!authEmail.trim() || !authPassword) {
+      setCloudMessage("Email dan password wajib diisi.");
+      return;
+    }
+    if (authPassword.length < 6) {
+      setCloudMessage("Password minimal 6 karakter.");
+      return;
+    }
+    setAuthBusy(true);
+    setCloudMessage("");
+    try {
+      if (authMode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: authEmail.trim(),
+          password: authPassword,
+          options: { emailRedirectTo: window.location.origin },
+        });
+        if (error) throw error;
+        if (!data.session) {
+          setCloudMessage("Akun dibuat. Cek email untuk konfirmasi, lalu masuk.");
+          setAuthMode("signin");
+        } else {
+          await bootCloud(data.session);
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: authEmail.trim(),
+          password: authPassword,
+        });
+        if (error) throw error;
+        await bootCloud(data.session);
+      }
+    } catch (error) {
+      setCloudMessage(error.message || "Gagal masuk ke akun.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function signOutCloud() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+  }
 
   const selectedWedding = weddings.find((w) => String(w.id) === String(selectedWeddingId));
 
@@ -803,14 +966,26 @@ export default function Page() {
     else setMonth((m) => m + 1);
   }
 
+  if (!supabaseConfigured) {
+    return <main className="cloudGate"><div className="cloudCard"><Cloud size={34}/><small>AYNIS · CLOUD DATA</small><h1>Supabase belum terhubung</h1><p>Environment variable Supabase belum tersedia pada deployment ini.</p></div></main>;
+  }
+
+  if (!ready || cloudState === "connecting") {
+    return <main className="cloudGate"><div className="cloudCard"><Cloud size={34}/><small>AYNIS · CLOUD DATA</small><h1>Menghubungkan data…</h1><p>Menyiapkan database Aynis Wedding Manager.</p></div></main>;
+  }
+
+  if (!session) {
+    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.0 CLOUD</small><h1>{authMode === "signup" ? "Buat Akun Owner" : "Masuk ke Aynis"}</h1><p>Gunakan akun yang sama di HP atau laptop lain agar data wedding tetap sama.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
+  }
+
   return (
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V3.2 FINANCE</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.0 CLOUD FINANCE</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
-        <button className="avatar" aria-label="Aynis Anis Makeup">AA</button>
+        <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Aynis Anis Makeup">AA</button></div>
       </header>
 
       {tab === "Home" && (

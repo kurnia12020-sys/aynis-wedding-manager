@@ -1,9 +1,17 @@
-# AYNIS Wedding Manager V3.2
+# AYNIS Wedding Manager V4.0 Cloud Data
 
-Perbaikan V3.2:
-- Master Harga Paket: nama paket + harga default
-- Pilih paket saat membuat Wedding, harga otomatis terisi dan tetap bisa diedit
-- Agenda Terdekat di tab Kalender
-- Tambah Isi Paket/Vendor/Pengeluaran muncul paling atas dan otomatis fokus
-- Seluruh fitur V3.1 Core Flow tetap dipertahankan
-- Penyimpanan masih localStorage; Supabase dipasang pada tahap akhir
+Versi ini memindahkan penyimpanan utama AYNIS Wedding Manager dari perangkat ke Supabase.
+
+## Fitur cloud
+- Akun Owner dengan email + password Supabase Auth.
+- Data Wedding, Vendor, Master Harga, pembayaran, pengeluaran, kalender, dan riwayat pembayaran vendor tersimpan di Supabase.
+- Login dengan akun yang sama di perangkat lain menampilkan data yang sama.
+- Data V3/V3.2 yang masih ada di localStorage otomatis diimpor saat akun pertama kali dipakai jika cloud masih kosong.
+- localStorage tetap dipakai sebagai cache/backup lokal, bukan sumber utama.
+- RLS aktif agar setiap akun hanya dapat membaca dan menulis datanya sendiri.
+
+## Environment Vercel
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
+Keduanya sudah disiapkan di project Vercel Aynis.
