@@ -1642,6 +1642,19 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
   const f = financials(wedding);
   const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
   const scheduledPaid = schedule.reduce((sum, stage) => sum + (stage.paid ? Number(stage.amount || 0) : 0), 0);
+  const [paymentDrafts, setPaymentDrafts] = useState({});
+
+  useEffect(() => {
+    const next = {};
+    schedule.forEach((stage) => { next[stage.key] = formatMoneyInput(stage.amount); });
+    setPaymentDrafts(next);
+  }, [wedding.id, wedding.paymentSchedule]);
+
+  function savePaymentStageAmount(stage) {
+    const amount = parseMoney(paymentDrafts[stage.key] ?? stage.amount);
+    onUpdatePaymentStage(stage.key, { amount });
+  }
+
   return <section className="detailPage">
     <div className="detailTopActions"><button className="backButton" onClick={onBack}><ArrowLeft size={17}/> Semua Wedding</button>{!readOnly&&<div><button onClick={onEdit}><Pencil size={15}/> Edit</button>{(f.remaining===0||wedding.completed)&&<button className={wedding.completed?"":"completeButton"} onClick={onToggleComplete}><CheckCircle2 size={15}/> {wedding.completed?"Buka Lagi":"Tandai Selesai"}</button>}<button className="danger" onClick={onDelete}><Trash2 size={15}/> Hapus</button></div>}</div>
 
@@ -1675,7 +1688,7 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
         {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
           <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={stage.paid?"Sudah dibayar":"Belum dibayar"}>{stage.paid?<CheckCircle2 size={22}/>:<span/>}</button>
           <div className="paymentStageMain"><b>{stage.label}</b><span>{stage.dueDate?`Jatuh tempo ${formatDate(stage.dueDate)}`:(stage.key==="dp1"?"Saat booking tanggal":"Tanggal dapat disesuaikan")}</span><em>{stage.paid?`Sudah dibayar${stage.paidDate?` · ${formatDate(stage.paidDate)}`:""}`:"Belum dibayar"}</em></div>
-          <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<input type="text" inputMode="numeric" value={formatMoneyInput(stage.amount)} onChange={(e)=>onUpdatePaymentStage(stage.key,{amount:parseMoney(e.target.value)})} placeholder="0"/>}</div>
+          <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<div className="paymentEditBox"><input type="text" inputMode="numeric" value={paymentDrafts[stage.key] ?? formatMoneyInput(stage.amount)} onChange={(e)=>setPaymentDrafts((current)=>({...current,[stage.key]:formatMoneyInput(parseMoney(e.target.value))}))} placeholder="0"/>{parseMoney(paymentDrafts[stage.key] ?? stage.amount)!==Number(stage.amount||0)&&<button className="saveStageButton" onClick={()=>savePaymentStageAmount(stage)}>Simpan</button>}</div>}</div>
         </div>)}
       </div>
       <div className="paymentScheduleSummary"><div><small>Terbayar dari Jadwal</small><b>{rp(scheduledPaid)}</b></div><div><small>Total Uang Masuk</small><b>{rp(f.incoming)}</b></div><div><small>Sisa Tagihan</small><b>{rp(f.remaining)}</b></div></div>

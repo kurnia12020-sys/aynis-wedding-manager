@@ -52,3 +52,10 @@
 .legacyPayments{margin-top:20px;padding-top:16px;border-top:1px dashed #eadfd4}
 .legacyTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 @media(max-width:760px){.paymentStage{grid-template-columns:auto 1fr}.paymentStageAmount{grid-column:2}.paymentScheduleSummary{grid-template-columns:1fr}.legacyTitle{align-items:flex-start;flex-direction:column}.legacyTitle .softButton{width:100%}}
+
+/* V4.10 - explicit save state for inline payment schedule edits */
+.paymentEditBox{display:flex;gap:8px;align-items:center}
+.paymentEditBox input{min-width:0;flex:1}
+.saveStageButton{border:0;border-radius:12px;padding:10px 14px;background:#6f4e37;color:#fff;font-weight:800;cursor:pointer;white-space:nowrap}
+.saveStageButton:hover{filter:brightness(.96)}
+@media(max-width:640px){.paymentEditBox{align-items:stretch;flex-direction:column}.saveStageButton{width:100%}}
