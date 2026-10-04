@@ -94,8 +94,41 @@ const monthNames = [
 ];
 const dayNames = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 
+function shiftDate(date, days) {
+  if (!date) return "";
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function defaultPaymentSchedule(wedding, existing = null) {
+  const deal = Number(wedding?.dealPrice || 0);
+  const dp1 = Math.min(1000000, deal);
+  const target30 = Math.round(deal * 0.3);
+  const target70 = Math.round(deal * 0.7);
+  const dp2 = Math.max(target30 - dp1, 0);
+  const dp3 = Math.max(target70 - dp1 - dp2, 0);
+  const finalPayment = Math.max(deal - dp1 - dp2 - dp3, 0);
+  const defaults = [
+    { id: "dp1", key: "dp1", label: "DP 1 / Booking Tanggal", amount: dp1, dueDate: "", paid: false, paidDate: "", notes: "Booking tanggal" },
+    { id: "dp2", key: "dp2", label: "DP 2 / Target 30%", amount: dp2, dueDate: "", paid: false, paidDate: "", notes: "Total pembayaran mencapai 30% dari Harga Deal" },
+    { id: "dp3", key: "dp3", label: "DP 3 / Target 70% (H-7)", amount: dp3, dueDate: shiftDate(wedding?.date, -7), paid: false, paidDate: "", notes: "Total pembayaran mencapai 70% dari Harga Deal" },
+    { id: "final", key: "final", label: "Pelunasan / H+2", amount: finalPayment, dueDate: shiftDate(wedding?.date, 2), paid: false, paidDate: "", notes: "Sisa tagihan setelah acara" },
+  ];
+  if (!Array.isArray(existing) || existing.length === 0) return defaults;
+  return defaults.map((base) => {
+    const saved = existing.find((item) => item.key === base.key || item.id === base.id);
+    return saved ? { ...base, ...saved, dueDate: ["dp3", "final"].includes(base.key) ? base.dueDate : (saved.dueDate || base.dueDate) } : base;
+  });
+}
+
+function scheduledPaidTotal(wedding) {
+  return (wedding.paymentSchedule || []).reduce((sum, item) => sum + (item.paid ? Number(item.amount || 0) : 0), 0);
+}
+
 function totalPayments(wedding) {
-  return (wedding.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const history = (wedding.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  return history + scheduledPaidTotal(wedding);
 }
 
 function totalExpenses(wedding) {
@@ -426,7 +459,7 @@ export default function Page() {
         weddings,
         vendors,
         packages,
-        schema_version: 43,
+        schema_version: 45,
         updated_at: new Date().toISOString(),
       }).eq("workspace_id", workspaceId);
       if (error) {
@@ -651,12 +684,18 @@ export default function Page() {
       notes: weddingForm.notes.trim(),
       completed: old?.completed || false,
       payments: old?.payments || [],
+      paymentSchedule: defaultPaymentSchedule({ dealPrice, date: weddingForm.date }, old?.paymentSchedule),
       packageItems: normalizedItems,
       createdAt: old?.createdAt || new Date().toISOString(),
     };
 
     if (!weddingForm.id && initialPayment > 0) {
-      record.payments = [{ id: Date.now() + 1, label: "DP / Pembayaran Awal", amount: initialPayment, date: new Date().toISOString().slice(0, 10), notes: "" }];
+      record.paymentSchedule = record.paymentSchedule.map((item) => item.key === "dp1" ? {
+        ...item,
+        amount: initialPayment,
+        paid: true,
+        paidDate: new Date().toISOString().slice(0, 10),
+      } : item);
     }
 
     let nextWeddings = null;
@@ -676,7 +715,7 @@ export default function Page() {
         : [record, ...cloudWeddings.filter((w) => w.id !== record.id)];
       const { error: saveError } = await supabase
         .from("app_state")
-        .update({ weddings: nextWeddings, schema_version: 43, updated_at: new Date().toISOString() })
+        .update({ weddings: nextWeddings, schema_version: 45, updated_at: new Date().toISOString() })
         .eq("workspace_id", workspaceId);
       if (saveError) throw saveError;
       setCloudState("online");
@@ -807,6 +846,32 @@ export default function Page() {
     setWeddings((current) => current.map((w) =>
       w.id === weddingId ? { ...w, payments: (w.payments || []).filter((p) => p.id !== paymentId) } : w
     ));
+  }
+
+  function updatePaymentScheduleItem(weddingId, stageKey, patch) {
+    setWeddings((current) => current.map((w) => {
+      if (String(w.id) !== String(weddingId)) return w;
+      const schedule = defaultPaymentSchedule(w, w.paymentSchedule);
+      return { ...w, paymentSchedule: schedule.map((item) => item.key === stageKey ? { ...item, ...patch } : item) };
+    }));
+  }
+
+  function togglePaymentScheduleItem(wedding, stage) {
+    const nextPaid = !stage.paid;
+    updatePaymentScheduleItem(wedding.id, stage.key, {
+      paid: nextPaid,
+      paidDate: nextPaid ? new Date().toISOString().slice(0, 10) : "",
+    });
+  }
+
+  function resetPaymentSchedule(wedding) {
+    if (!confirm("Hitung ulang nominal DP berdasarkan Harga Deal saat ini? Status pembayaran yang sudah dicentang akan dipertahankan.")) return;
+    const current = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
+    const fresh = defaultPaymentSchedule(wedding, null).map((base) => {
+      const oldStage = current.find((item) => item.key === base.key);
+      return { ...base, paid: Boolean(oldStage?.paid), paidDate: oldStage?.paidDate || "" };
+    });
+    setWeddings((list) => list.map((w) => String(w.id) === String(wedding.id) ? { ...w, paymentSchedule: fresh } : w));
   }
 
   function toggleWeddingComplete(wedding) {
@@ -1197,6 +1262,9 @@ export default function Page() {
           onEditVendorPayment={(item, payment) => openVendorPayment(selectedWedding, item, payment)}
           onDeleteVendorPayment={(itemId, paymentId) => deleteVendorPayment(selectedWedding.id, itemId, paymentId)}
           onDeletePayment={(paymentId) => deletePayment(selectedWedding.id, paymentId)}
+          onUpdatePaymentStage={(stageKey, patch) => updatePaymentScheduleItem(selectedWedding.id, stageKey, patch)}
+          onTogglePaymentStage={(stage) => togglePaymentScheduleItem(selectedWedding, stage)}
+          onResetPaymentSchedule={() => resetPaymentSchedule(selectedWedding)}
           onWhatsApp={() => openWhatsApp(selectedWedding.whatsapp)}
           canViewFinance={canViewFinance}
         />
@@ -1464,8 +1532,10 @@ function VendorCard({ vendor, readOnly=false, onWhatsApp, onEdit, onDelete }) {
   </article>;
 }
 
-function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onWhatsApp }) {
+function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onWhatsApp }) {
   const f = financials(wedding);
+  const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
+  const scheduledPaid = schedule.reduce((sum, stage) => sum + (stage.paid ? Number(stage.amount || 0) : 0), 0);
   return <section className="detailPage">
     <div className="detailTopActions"><button className="backButton" onClick={onBack}><ArrowLeft size={17}/> Semua Wedding</button>{!readOnly&&<div><button onClick={onEdit}><Pencil size={15}/> Edit</button>{(f.remaining===0||wedding.completed)&&<button className={wedding.completed?"":"completeButton"} onClick={onToggleComplete}><CheckCircle2 size={15}/> {wedding.completed?"Buka Lagi":"Tandai Selesai"}</button>}<button className="danger" onClick={onDelete}><Trash2 size={15}/> Hapus</button></div>}</div>
 
@@ -1494,8 +1564,16 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
     </section>
 
     <section className="panel">
-      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Riwayat Pembayaran</h2><p>DP, cicilan, dan pelunasan tercatat satu per satu.</p></div>{!readOnly&&f.remaining>0&&<button className="primary compact" onClick={onPay}><Plus size={16}/> Catat Pembayaran</button>}</div>
-      {(wedding.payments||[]).length===0?<Empty text="Belum ada pembayaran klien."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div>}
+      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal otomatis mengikuti Harga Deal, tetapi Owner dan Admin tetap dapat mengubah nominal sesuai kesepakatan.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
+      <div className="paymentScheduleList">
+        {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
+          <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={stage.paid?"Sudah dibayar":"Belum dibayar"}>{stage.paid?<CheckCircle2 size={22}/>:<span/>}</button>
+          <div className="paymentStageMain"><b>{stage.label}</b><span>{stage.dueDate?`Jatuh tempo ${formatDate(stage.dueDate)}`:(stage.key==="dp1"?"Saat booking tanggal":"Tanggal dapat disesuaikan")}</span><em>{stage.paid?`Sudah dibayar${stage.paidDate?` · ${formatDate(stage.paidDate)}`:""}`:"Belum dibayar"}</em></div>
+          <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<input type="number" min="0" value={stage.amount ?? ""} onChange={(e)=>onUpdatePaymentStage(stage.key,{amount:Number(e.target.value||0)})}/>}</div>
+        </div>)}
+      </div>
+      <div className="paymentScheduleSummary"><div><small>Terbayar dari Jadwal</small><b>{rp(scheduledPaid)}</b></div><div><small>Total Uang Masuk</small><b>{rp(f.incoming)}</b></div><div><small>Sisa Tagihan</small><b>{rp(f.remaining)}</b></div></div>
+      {(wedding.payments||[]).length>0&&<div className="legacyPayments"><div className="legacyTitle"><b>Catatan Pembayaran Lain / Sebelumnya</b>{!readOnly&&f.remaining>0&&<button className="softButton compact" onClick={onPay}><Plus size={15}/> Tambah Catatan</button>}</div><div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div></div>}
     </section>
 
     {canViewFinance && <section className="panel profitPanel">

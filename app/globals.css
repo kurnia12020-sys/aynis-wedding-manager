@@ -29,3 +29,26 @@
 .currentRole{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid #e8ddd3;background:#fbf7f3;border-radius:16px}.currentRole>svg{color:#7b553d}.currentRole>div{display:flex;flex-direction:column;gap:3px}.currentRole b{text-transform:capitalize}.currentRole span{font-size:11px;color:#7d7067}
 .inviteForm{display:grid;gap:12px}.memberList{display:grid;gap:8px}.memberRow{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:10px;border:1px solid #eaded4;border-radius:14px;padding:11px}.memberIcon{width:38px;height:38px;border-radius:12px;background:#f2e6dc;display:grid;place-items:center;color:#805b43}.memberRow>div:nth-child(2){display:flex;flex-direction:column;gap:3px;min-width:0}.memberRow b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.memberRow span{font-size:9px;color:#82746b;letter-spacing:.04em}.roleHelp{display:grid;gap:7px;padding:13px;border-radius:14px;background:#f8f1eb;color:#665044}.roleHelp b{font-size:12px}.roleHelp span{font-size:11px;line-height:1.4}.teamPanel .iconDanger{width:34px;height:34px;border:1px solid #f0d0d0;border-radius:10px;background:#fff3f3;color:#a54848;display:grid;place-items:center}
 @media(max-width:600px){.teamPanel{width:100%;max-height:92dvh;border-radius:24px 24px 0 0;padding:22px 16px}}
+
+/* V4.5 Payment Schedule */
+.softButton{border:1px solid #dccabc;background:#fff8f2;color:#795943;border-radius:12px;padding:10px 14px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.paymentScheduleList{display:grid;gap:10px;margin-top:16px}
+.paymentStage{display:grid;grid-template-columns:auto 1fr minmax(150px,190px);gap:14px;align-items:center;padding:15px;border:1px solid #eadfd4;border-radius:16px;background:#fffdfa}
+.paymentStage.stagePaid{background:#f5fbf6;border-color:#cfe8d4}
+.payCheck{width:34px;height:34px;border-radius:50%;border:2px solid #c9b9aa;background:#fff;display:grid;place-items:center;padding:0;color:#4f7d59}
+.payCheck span{width:12px;height:12px;border-radius:50%;background:#eee7df}
+.payCheck.checked{border-color:#5f8d68;background:#edf7ef}
+.payCheck:disabled{cursor:default;opacity:.85}
+.paymentStageMain{display:flex;flex-direction:column;gap:4px;min-width:0}
+.paymentStageMain span,.paymentStageMain em{font-size:12px;color:#7a6c60}
+.paymentStageMain em{font-style:normal;font-weight:800}
+.stagePaid .paymentStageMain em{color:#4f7d59}
+.paymentStageAmount small{display:block;font-size:10px;color:#8a7768;margin-bottom:5px}
+.paymentStageAmount input{width:100%;border:1px solid #ddd0c5;border-radius:10px;padding:10px;background:#fff;color:#29241f;font-weight:800}
+.paymentStageAmount strong{font-size:16px}
+.paymentScheduleSummary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.paymentScheduleSummary>div{padding:12px;border-radius:14px;background:#f7f2ec;border:1px solid #eee1d7;display:flex;flex-direction:column;gap:5px}
+.paymentScheduleSummary small{font-size:9px;color:#806f61}
+.legacyPayments{margin-top:20px;padding-top:16px;border-top:1px dashed #eadfd4}
+.legacyTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+@media(max-width:760px){.paymentStage{grid-template-columns:auto 1fr}.paymentStageAmount{grid-column:2}.paymentScheduleSummary{grid-template-columns:1fr}.legacyTitle{align-items:flex-start;flex-direction:column}.legacyTitle .softButton{width:100%}}

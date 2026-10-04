@@ -1,6 +1,6 @@
-# AYNIS Wedding Manager V4.4 — Admin Save & Multi-user Sync
+# AYNIS Wedding Manager V4.5 — Admin Save & Multi-user Sync
 
-Perbaikan V4.4:
+Perbaikan V4.5:
 - Admin dapat menambah dan menyimpan Wedding baru.
 - Simpan Wedding menulis langsung ke Supabase sebelum form ditutup.
 - Sinkronisasi realtime Owner/Admin untuk mengurangi data tertimpa antar perangkat.
@@ -8,3 +8,12 @@ Perbaikan V4.4:
 - Owner tetap memiliki akses penuh.
 
 Upload seluruh isi project ke repository `aynis-wedding-manager`, commit ke `main`, lalu Vercel akan deploy otomatis.
+
+
+## V4.5 Payment Schedule
+- DP1 booking default Rp1.000.000
+- DP2 otomatis menuju total 30% Harga Deal
+- DP3 H-7 otomatis menuju total 70% Harga Deal
+- Pelunasan otomatis H+2 setelah acara
+- Owner dan Admin dapat edit nominal dan centang Sudah Dibayar/Belum
+- Pengeluaran vendor dan profit tetap hanya Owner
