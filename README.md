@@ -39,3 +39,10 @@ V4.23 - PWA / Add to Home Screen
 ## V4.24 — Bridal Calendar Refresh
 - Calendar-only visual refresh: softer bridal palette, clearer today/event/weekend states, more polished upcoming agenda cards.
 - No accounting, Supabase, invoice, payment, or business-logic changes.
+
+
+## V4.25 — Invoice Payment Stage Status
+- Invoice kini menampilkan status tahapan pembayaran: DP 1 / Booking Tanggal, DP 2 / Target 30%, DP 3 / Target 70%, dan Pelunasan.
+- Status otomatis membaca total pembayaran yang sudah tercatat: Lunas, Sebagian, atau Menunggu Pembayaran.
+- Menampilkan tanggal pembayaran bila tersedia serta nominal terbayar dibanding target tahap.
+- Tidak membuat transaksi baru; invoice hanya membaca data pembayaran yang sudah ada.
