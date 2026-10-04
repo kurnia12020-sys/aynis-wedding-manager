@@ -44,6 +44,7 @@ const emptyWedding = {
   place: "",
   packageName: "",
   dealPrice: "",
+  discount: "",
   initialPayment: "",
   notes: "",
   packageItems: [],
@@ -108,8 +109,12 @@ function shiftDate(date, days) {
   return d.toISOString().slice(0, 10);
 }
 
+function netDealPrice(wedding) {
+  return Math.max(Number(wedding?.dealPrice || 0) - Number(wedding?.discount || 0), 0);
+}
+
 function defaultPaymentSchedule(wedding, existing = null) {
-  const deal = Number(wedding?.dealPrice || 0);
+  const deal = netDealPrice(wedding);
   const dp1 = Math.min(1000000, deal);
   const target30 = Math.round(deal * 0.3);
   const target70 = Math.round(deal * 0.7);
@@ -153,7 +158,7 @@ function applyPaymentHistoryToSchedule(wedding, schedule) {
 }
 
 function recalculateFollowingPayments(wedding, schedule, changedKey) {
-  const deal = Number(wedding?.dealPrice || 0);
+  const deal = netDealPrice(wedding);
   const target30 = Math.round(deal * 0.3);
   const target70 = Math.round(deal * 0.7);
   const next = schedule.map((item) => ({
@@ -222,17 +227,21 @@ function totalExpensesPaid(wedding) {
 
 function financials(wedding) {
   const deal = Number(wedding.dealPrice || 0);
+  const discount = Math.max(Number(wedding.discount || 0), 0);
+  const netDeal = Math.max(deal - discount, 0);
   const incoming = totalPayments(wedding);
   const expenses = totalExpenses(wedding);
   const expensesPaid = totalExpensesPaid(wedding);
   return {
     deal,
+    discount,
+    netDeal,
     incoming,
-    remaining: Math.max(deal - incoming, 0),
+    remaining: Math.max(netDeal - incoming, 0),
     expenses,
     expensesPaid,
     vendorDebt: Math.max(expenses - expensesPaid, 0),
-    profit: deal - expenses,
+    profit: netDeal - expenses,
     cashOnHand: incoming - expensesPaid,
   };
 }
@@ -240,7 +249,7 @@ function financials(wedding) {
 function paymentStatus(wedding) {
   if (wedding.completed) return "Selesai";
   const f = financials(wedding);
-  if (f.deal > 0 && f.remaining === 0) return "Lunas";
+  if (f.netDeal > 0 && f.remaining === 0) return "Lunas";
   const count = (wedding.payments || []).length;
   if (count === 0) return "Booking";
   if (count === 1) return "DP";
@@ -677,6 +686,7 @@ export default function Page() {
       place: wedding.place || "",
       packageName: wedding.packageName || "",
       dealPrice: String(wedding.dealPrice ?? ""),
+      discount: String(wedding.discount ?? ""),
       initialPayment: "",
       notes: wedding.notes || "",
       packageItems: (wedding.packageItems || []).map((item) => ({
@@ -694,6 +704,8 @@ export default function Page() {
     event.preventDefault();
     try {
     const dealPrice = Number(weddingForm.dealPrice || 0);
+    const discount = Number(weddingForm.discount || 0);
+    const netDeal = Math.max(dealPrice - discount, 0);
     const initialPayment = Number(weddingForm.initialPayment || 0);
 
     if (!weddingForm.couple.trim()) return alert("Nama pengantin wajib diisi.");
@@ -701,7 +713,9 @@ export default function Page() {
     if (!weddingForm.place.trim()) return alert("Lokasi wajib diisi.");
     if (!weddingForm.packageName.trim()) return alert("Nama paket wajib diisi.");
     if (dealPrice <= 0) return alert("Harga Deal harus lebih dari Rp0.");
-    if (initialPayment < 0 || initialPayment > dealPrice) return alert("Pembayaran awal tidak valid.");
+    if (discount < 0 || discount >= dealPrice) return alert("Cashback / potongan harus lebih kecil dari Harga Deal.");
+    if (initialPayment < 0 || initialPayment > netDeal) return alert("Pembayaran awal tidak valid.");
+    if (weddingForm.id && !confirm("Simpan semua perubahan pada data Wedding ini?")) return;
 
     const old = weddings.find((w) => w.id === weddingForm.id);
     const normalizedItems = (weddingForm.packageItems || []).map((item, index) => {
@@ -742,10 +756,11 @@ export default function Page() {
       place: weddingForm.place.trim(),
       packageName: weddingForm.packageName.trim(),
       dealPrice,
+      discount,
       notes: weddingForm.notes.trim(),
       completed: old?.completed || false,
       payments: old?.payments || [],
-      paymentSchedule: defaultPaymentSchedule({ dealPrice, date: weddingForm.date }, old?.paymentSchedule),
+      paymentSchedule: defaultPaymentSchedule({ dealPrice, discount, date: weddingForm.date }, old?.paymentSchedule),
       packageItems: normalizedItems,
       createdAt: old?.createdAt || new Date().toISOString(),
     };
@@ -886,6 +901,7 @@ export default function Page() {
     if (!paymentDate) return alert("Tanggal pembayaran wajib dipilih.");
     if (amount <= 0) return alert("Nominal pembayaran harus lebih dari Rp0.");
     if (amount > maxAllowed) return alert("Pembayaran melebihi sisa tagihan.");
+    if (paymentEditId && !confirm("Simpan perubahan pada catatan pembayaran ini?")) return;
 
     const record = {
       id: paymentEditId || Date.now(),
@@ -918,6 +934,7 @@ export default function Page() {
   }
 
   function updatePaymentScheduleItem(weddingId, stageKey, patch) {
+    if (!confirm("Simpan perubahan pada jadwal pembayaran ini?")) return;
     setWeddings((current) => current.map((w) => {
       if (String(w.id) !== String(weddingId)) return w;
       const schedule = defaultPaymentSchedule(w, w.paymentSchedule);
@@ -959,6 +976,7 @@ export default function Page() {
     if (!wedding.completed && f.remaining > 0) {
       return alert("Wedding baru bisa ditandai Selesai setelah pembayaran klien Lunas.");
     }
+    if (!confirm(`Simpan perubahan status Wedding menjadi ${wedding.completed ? "Belum Selesai" : "Selesai"}?`)) return;
     setWeddings((current) => current.map((w) =>
       String(w.id) === String(wedding.id) ? { ...w, completed: !w.completed } : w
     ));
@@ -1008,6 +1026,7 @@ export default function Page() {
     if (!packageForm.category.trim()) return alert("Kategori wajib diisi.");
     if (cost < 0) return alert("Biaya aktual tidak valid.");
     if (paid < 0 || paid > cost) return alert("Jumlah yang sudah dibayar vendor tidak valid.");
+    if (packageForm.id && !confirm("Simpan perubahan pada vendor / pengeluaran ini?")) return;
 
     let vendorPayments = Array.isArray(packageForm.vendorPayments) ? packageForm.vendorPayments : [];
     if (!packageForm.id && vendorPayments.length === 0 && paid > 0) {
@@ -1064,6 +1083,7 @@ export default function Page() {
     if (!vendorPaymentDate) return alert("Tanggal pembayaran vendor wajib dipilih.");
     if (amount <= 0) return alert("Nominal pembayaran vendor harus lebih dari Rp0.");
     if (amount > maxAllowed) return alert("Pembayaran melebihi sisa tagihan vendor.");
+    if (vendorPaymentEditId && !confirm("Simpan perubahan pada pembayaran vendor ini?")) return;
 
     const record = {
       id: vendorPaymentEditId || Date.now(),
@@ -1125,6 +1145,7 @@ export default function Page() {
     if (!packageMasterForm.name.trim()) return alert("Nama paket wajib diisi.");
     const price = Number(packageMasterForm.price || 0);
     if (price < 0) return alert("Harga paket tidak valid.");
+    if (packageMasterForm.id && !confirm("Simpan perubahan pada Master Harga ini?")) return;
     const record = {
       id: packageMasterForm.id || Date.now(),
       name: packageMasterForm.name.trim(),
@@ -1170,6 +1191,7 @@ export default function Page() {
     event.preventDefault();
     if (!vendorForm.name.trim()) return alert("Nama vendor wajib diisi.");
     if (!vendorForm.category.trim()) return alert("Kategori vendor wajib diisi.");
+    if (vendorForm.id && !confirm("Simpan perubahan pada data vendor ini?")) return;
     const record = {
       id: vendorForm.id || Date.now(),
       name: vendorForm.name.trim(),
@@ -1273,7 +1295,7 @@ export default function Page() {
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.4 TEAM ACCESS</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.8 PAYMENT HISTORY FIX</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
         <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
@@ -1460,7 +1482,11 @@ export default function Page() {
               <Field label="Nama Paket"><input id="manual-package-name" value={weddingForm.packageName} onChange={(e)=>setWeddingForm({...weddingForm,packageName:e.target.value})} placeholder="Contoh: Platinum"/><em>Nama tetap bisa diubah untuk paket khusus.</em></Field>
               <div className="formTwoCols">
                 <Field label="Harga Deal Klien"><input type="text" inputMode="numeric" value={formatMoneyInput(weddingForm.dealPrice)} onChange={(e)=>setWeddingForm({...weddingForm,dealPrice:onlyDigits(e.target.value)})} placeholder="15.000.000"/>{weddingForm.dealPrice&&<em>{rp(weddingForm.dealPrice)}</em>}</Field>
+                <Field label="Cashback / Potongan"><input type="text" inputMode="numeric" value={formatMoneyInput(weddingForm.discount)} onChange={(e)=>setWeddingForm({...weddingForm,discount:onlyDigits(e.target.value)})} placeholder="0"/>{weddingForm.discount&&<em>Deal bersih: {rp(Math.max(Number(weddingForm.dealPrice||0)-Number(weddingForm.discount||0),0))}</em>}</Field>
+              </div>
+              <div className="formTwoCols">
                 {!weddingForm.id ? <Field label="DP / Pembayaran Awal"><input type="text" inputMode="numeric" value={formatMoneyInput(weddingForm.initialPayment)} onChange={(e)=>setWeddingForm({...weddingForm,initialPayment:onlyDigits(e.target.value)})} placeholder="1.000.000"/>{weddingForm.initialPayment&&<em>{rp(weddingForm.initialPayment)}</em>}</Field> : <div className="editPaymentHint"><small>PEMBAYARAN</small><b>{rp(totalPayments(weddings.find((w)=>w.id===weddingForm.id)||{}))}</b><span>Riwayat pembayaran tetap dikelola dari Detail Wedding.</span></div>}
+                <div className="editPaymentHint"><small>HARGA DEAL BERSIH</small><b>{rp(Math.max(Number(weddingForm.dealPrice||0)-Number(weddingForm.discount||0),0))}</b><span>Harga Deal − Cashback / Potongan</span></div>
               </div>
             </section>
 
@@ -1485,7 +1511,7 @@ export default function Page() {
             </section>
 
             <div className="stickySave">
-              <div><small>RINGKASAN</small><b>{rp(weddingForm.dealPrice)} deal · {rp((weddingForm.packageItems||[]).reduce((s,i)=>s+Number(i.actualCost||0),0))} pengeluaran</b></div>
+              <div><small>RINGKASAN</small><b>{rp(Math.max(Number(weddingForm.dealPrice||0)-Number(weddingForm.discount||0),0))} deal bersih · {rp((weddingForm.packageItems||[]).reduce((s,i)=>s+Number(i.actualCost||0),0))} pengeluaran</b></div>
               <button className="primary" type="submit"><CheckCircle2 size={18}/> Simpan Wedding</button>
             </div>
           </form>
@@ -1626,7 +1652,7 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
 
     <section className="packagePanel panel">
       <div className="sectionTitle"><div><small>2 · PAKET</small><h3>{wedding.packageName}</h3></div><Package size={24}/></div>
-      {canViewFinance ? <div className="summaryFour"><MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Status" value={paymentStatus(wedding)}/></div> : <div className="summaryFour"><MiniStat label="Status" value={paymentStatus(wedding)}/></div>}
+      {canViewFinance ? <div className="summaryFour"><MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Status" value={paymentStatus(wedding)}/></div> : <div className="summaryFour"><MiniStat label="Status" value={paymentStatus(wedding)}/></div>}
     </section>
 
     <section className="panel">
@@ -1653,15 +1679,15 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
         </div>)}
       </div>
       <div className="paymentScheduleSummary"><div><small>Terbayar dari Jadwal</small><b>{rp(scheduledPaid)}</b></div><div><small>Total Uang Masuk</small><b>{rp(f.incoming)}</b></div><div><small>Sisa Tagihan</small><b>{rp(f.remaining)}</b></div></div>
-      {(wedding.payments||[]).length>0&&<div className="legacyPayments"><div className="legacyTitle"><b>Catatan Pembayaran Lain / Sebelumnya</b>{!readOnly&&f.remaining>0&&<button className="softButton compact" onClick={onPay}><Plus size={15}/> Tambah Catatan</button>}</div><div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div></div>}
+      <div className="legacyPayments"><div className="legacyTitle"><div><b>Riwayat Pembayaran / Cicilan Tambahan</b><span className="mutedBlock">Setiap cicilan yang masuk otomatis mengurangi sisa DP berikutnya.</span></div>{!readOnly&&f.remaining>0&&<button className="softButton compact" onClick={onPay}><Plus size={15}/> Tambah Cicilan</button>}</div>{(wedding.payments||[]).length===0?<Empty text="Belum ada cicilan atau catatan pembayaran tambahan."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div>}</div>
     </section>
 
     {canViewFinance && <section className="panel profitPanel">
       <div className="sectionTitle"><div><small>5–6 · PENGELUARAN & RINGKASAN KEUNTUNGAN</small><h3>Posisi Keuangan Wedding</h3></div><TrendingUp size={24}/></div>
       <div className="financialSummaryGrid">
-        <MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/><MiniStat label="Estimasi Untung" value={rp(f.profit)} strong/><MiniStat label="Uang Pegangan Sekarang" value={rp(f.cashOnHand)} strong/>
+        <MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/><MiniStat label="Estimasi Untung" value={rp(f.profit)} strong/><MiniStat label="Uang Pegangan Sekarang" value={rp(f.cashOnHand)} strong/>
       </div>
-      <p className="formula">Estimasi Untung = Harga Deal − Total Pengeluaran · Uang Pegangan = Uang Masuk − Pengeluaran yang sudah dibayar.</p>
+      <p className="formula">Estimasi Untung = Deal Bersih − Total Pengeluaran · Uang Pegangan = Uang Masuk − Pengeluaran yang sudah dibayar.</p>
     </section>}
   </section>;
 }
