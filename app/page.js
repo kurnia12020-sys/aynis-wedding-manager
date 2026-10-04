@@ -132,6 +132,31 @@ function shiftDate(date, days) {
   return d.toISOString().slice(0, 10);
 }
 
+function monthKey(date) {
+  return date ? String(date).slice(0, 7) : "";
+}
+
+function monthlyIncomingForWedding(wedding, selectedMonth) {
+  const history = (wedding.payments || []).reduce((sum, payment) =>
+    sum + (monthKey(payment.date) === selectedMonth ? Number(payment.amount || 0) : 0), 0);
+  const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
+  const staged = schedule.reduce((sum, stage) =>
+    sum + (stage.paid && monthKey(stage.paidDate) === selectedMonth ? Number(stage.amount || 0) : 0), 0);
+  return history + staged;
+}
+
+function monthlyVendorPaidForWedding(wedding, selectedMonth) {
+  return (wedding.packageItems || []).reduce((sum, item) => {
+    const payments = Array.isArray(item.vendorPayments) ? item.vendorPayments : [];
+    if (payments.length > 0) {
+      return sum + payments.reduce((sub, payment) =>
+        sub + (monthKey(payment.date) === selectedMonth ? Number(payment.amount || 0) : 0), 0);
+    }
+    const legacyPaid = Number(item.paidAmount || 0);
+    return sum + (legacyPaid > 0 && monthKey(wedding.date) === selectedMonth ? legacyPaid : 0);
+  }, 0);
+}
+
 
 function reminderStatus(stage) {
   if (!stage?.dueDate) return { key: "none", label: "Tanggal belum diatur", days: null };
@@ -343,6 +368,7 @@ export default function Page() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("admin");
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [reportMonth, setReportMonth] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
 
   const [weddingOpen, setWeddingOpen] = useState(false);
   const [weddingForm, setWeddingForm] = useState(emptyWedding);
@@ -588,7 +614,7 @@ export default function Page() {
         weddings,
         vendors,
         packages,
-        schema_version: 46,
+        schema_version: 47,
         updated_at: new Date().toISOString(),
       }).eq("workspace_id", workspaceId);
       if (error) {
@@ -718,6 +744,27 @@ export default function Page() {
     });
     return rows.sort((a, b) => (a.status.days ?? 999) - (b.status.days ?? 999));
   }, [weddings]);
+
+  const monthlyReport = useMemo(() => {
+    const eventWeddings = weddings.filter((wedding) => monthKey(wedding.date) === reportMonth);
+    const rows = eventWeddings.map((wedding) => {
+      const f = financials(wedding);
+      return { wedding, f };
+    });
+    const summary = rows.reduce((acc, row) => {
+      acc.billing += row.f.netDeal;
+      acc.expenses += row.f.expenses;
+      acc.profit += row.f.profit;
+      acc.receivable += row.f.remaining;
+      acc.vendorDebt += row.f.vendorDebt;
+      if (row.wedding.completed) acc.completed += 1;
+      return acc;
+    }, { billing: 0, expenses: 0, profit: 0, receivable: 0, vendorDebt: 0, completed: 0 });
+    summary.incoming = weddings.reduce((sum, wedding) => sum + monthlyIncomingForWedding(wedding, reportMonth), 0);
+    summary.vendorPaid = weddings.reduce((sum, wedding) => sum + monthlyVendorPaidForWedding(wedding, reportMonth), 0);
+    summary.cashFlow = summary.incoming - summary.vendorPaid;
+    return { rows, summary, count: eventWeddings.length };
+  }, [weddings, reportMonth]);
 
   const calendarDays = useMemo(() => {
     const first = new Date(year, month, 1);
@@ -868,7 +915,7 @@ export default function Page() {
         : [record, ...cloudWeddings.filter((w) => w.id !== record.id)];
       const { error: saveError } = await supabase
         .from("app_state")
-        .update({ weddings: nextWeddings, schema_version: 46, updated_at: new Date().toISOString() })
+        .update({ weddings: nextWeddings, schema_version: 47, updated_at: new Date().toISOString() })
         .eq("workspace_id", workspaceId);
       if (saveError) throw saveError;
       setCloudState("online");
@@ -1359,6 +1406,43 @@ export default function Page() {
     else setMonth((m) => m - 1);
   }
 
+  function printMonthlyReport() {
+    if (!isOwner) return;
+    const [reportYear, reportMonthNumber] = reportMonth.split("-").map(Number);
+    const title = `${monthNames[(reportMonthNumber || 1) - 1]} ${reportYear}`;
+    const rowsHtml = monthlyReport.rows.length
+      ? monthlyReport.rows.map(({ wedding, f }) => `
+        <tr>
+          <td>${escapeHtml(wedding.couple || "-")}<small>${escapeHtml(wedding.packageName || "-")}</small></td>
+          <td>${escapeHtml(formatDate(wedding.date))}</td>
+          <td>${escapeHtml(rp(f.netDeal))}</td>
+          <td>${escapeHtml(rp(f.incoming))}</td>
+          <td>${escapeHtml(rp(f.remaining))}</td>
+          <td>${escapeHtml(rp(f.expenses))}</td>
+          <td>${escapeHtml(rp(f.profit))}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="7" class="empty">Tidak ada wedding pada bulan ini.</td></tr>`;
+    const report = window.open("", "_blank", "width=980,height=800");
+    if (!report) return alert("Popup diblokir browser. Izinkan popup untuk mencetak laporan.");
+    report.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Laporan Bulanan AYNIS - ${escapeHtml(title)}</title><style>
+      body{font-family:Arial,sans-serif;color:#2f2823;padding:34px}h1{font-family:Georgia,serif;margin:4px 0 6px}.sub{color:#806f61;margin-bottom:24px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0 26px}.box{border:1px solid #ded2c8;border-radius:12px;padding:12px}.box small{display:block;color:#8f725e;font-size:10px;text-transform:uppercase;letter-spacing:.08em}.box b{display:block;margin-top:6px;font-size:15px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border-bottom:1px solid #e6ddd6;padding:10px 7px;text-align:right}th:first-child,td:first-child{text-align:left}td:nth-child(2),th:nth-child(2){text-align:left}td small{display:block;color:#88776b;margin-top:3px}.empty{text-align:center!important;color:#88776b;padding:24px}.foot{margin-top:22px;font-size:10px;color:#85776c;line-height:1.5}@media print{body{padding:0}.noPrint{display:none}}
+    </style></head><body><small>AYNIS ANIS MAKEUP · LAPORAN OWNER</small><h1>Laporan Bulanan</h1><div class="sub">${escapeHtml(title)}</div>
+    <div class="grid">
+      <div class="box"><small>Wedding Bulan Ini</small><b>${monthlyReport.count}</b></div>
+      <div class="box"><small>Omzet / Total Tagihan</small><b>${escapeHtml(rp(monthlyReport.summary.billing))}</b></div>
+      <div class="box"><small>Uang Masuk Bulan Ini</small><b>${escapeHtml(rp(monthlyReport.summary.incoming))}</b></div>
+      <div class="box"><small>Pengeluaran Komitmen</small><b>${escapeHtml(rp(monthlyReport.summary.expenses))}</b></div>
+      <div class="box"><small>Vendor Dibayar Bulan Ini</small><b>${escapeHtml(rp(monthlyReport.summary.vendorPaid))}</b></div>
+      <div class="box"><small>Estimasi Profit</small><b>${escapeHtml(rp(monthlyReport.summary.profit))}</b></div>
+      <div class="box"><small>Sisa Tagihan Wedding Bulan</small><b>${escapeHtml(rp(monthlyReport.summary.receivable))}</b></div>
+      <div class="box"><small>Arus Kas Bulan Ini</small><b>${escapeHtml(rp(monthlyReport.summary.cashFlow))}</b></div>
+    </div>
+    <table><thead><tr><th>Wedding</th><th>Tanggal</th><th>Tagihan</th><th>Masuk Total</th><th>Sisa</th><th>Pengeluaran</th><th>Profit</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+    <div class="foot">Omzet, pengeluaran komitmen, profit, piutang, dan utang vendor dikelompokkan berdasarkan tanggal wedding. Uang masuk dan pembayaran vendor bulan ini dikelompokkan berdasarkan tanggal transaksi. Dokumen ini khusus Owner dan tidak mengubah data pembukuan.</div>
+    <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+    report.document.close();
+  }
+
   function nextMonth() {
     if (month === 11) { setMonth(0); setYear((y) => y + 1); }
     else setMonth((m) => m + 1);
@@ -1424,7 +1508,7 @@ export default function Page() {
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.16 REMINDER JATUH TEMPO</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.17 LAPORAN BULANAN OWNER</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
         <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
@@ -1538,6 +1622,24 @@ export default function Page() {
             <Card t="Estimasi Untung" v={rp(totals.profit)} s="Harga Deal - Pengeluaran" highlight/>
             <Card t="Uang Pegangan" v={rp(totals.cashOnHand)} s="Uang Masuk - biaya dibayar"/>
           </section>
+          {isOwner && <section className="panel monthlyOwnerReport">
+            <div className="panelHeader compactHeader"><div><small>LAPORAN KHUSUS OWNER</small><h2>Laporan Bulanan</h2><p>Omzet dan profit mengikuti tanggal wedding. Arus kas mengikuti tanggal pembayaran sebenarnya.</p></div><button className="softButton" onClick={printMonthlyReport}><Printer size={16}/> Cetak / PDF</button></div>
+            <div className="monthlyReportControl"><label>Bulan Laporan<input type="month" value={reportMonth} onChange={(e)=>setReportMonth(e.target.value)}/></label><span>{monthlyReport.count} wedding · {monthlyReport.summary.completed} selesai</span></div>
+            <div className="monthlyReportStats">
+              <MiniStat label="Omzet / Total Tagihan" value={rp(monthlyReport.summary.billing)} strong/>
+              <MiniStat label="Uang Masuk Bulan Ini" value={rp(monthlyReport.summary.incoming)} strong/>
+              <MiniStat label="Pengeluaran Komitmen" value={rp(monthlyReport.summary.expenses)}/>
+              <MiniStat label="Vendor Dibayar Bulan Ini" value={rp(monthlyReport.summary.vendorPaid)}/>
+              <MiniStat label="Estimasi Profit" value={rp(monthlyReport.summary.profit)} strong/>
+              <MiniStat label="Arus Kas Bulan Ini" value={rp(monthlyReport.summary.cashFlow)} strong/>
+              <MiniStat label="Sisa Tagihan Wedding Bulan" value={rp(monthlyReport.summary.receivable)}/>
+              <MiniStat label="Sisa Utang Vendor Wedding Bulan" value={rp(monthlyReport.summary.vendorDebt)}/>
+            </div>
+            <div className="monthlyReportTable">
+              {monthlyReport.rows.length===0?<Empty text="Belum ada wedding pada bulan yang dipilih."/>:monthlyReport.rows.map(({wedding,f})=><button key={wedding.id} className="monthlyReportRow" onClick={()=>openDetail(wedding)}><div><b>{wedding.couple}</b><span>{formatDate(wedding.date)} · {wedding.packageName || "-"}</span></div><div><small>Tagihan</small><b>{rp(f.netDeal)}</b></div><div><small>Profit</small><b className={f.profit<0?"negative":"positive"}>{rp(f.profit)}</b></div></button>)}
+            </div>
+            <p className="monthlyReportNote">Laporan ini hanya tampil untuk Owner. Membuka atau mencetak laporan tidak membuat transaksi baru dan tidak mengubah pembukuan.</p>
+          </section>}
           <div className="sectionHead"><div><small>PER WEDDING</small><h3>Posisi Keuangan</h3></div></div>
           <section className="financeList">
             {weddings.length === 0 ? <Empty text="Belum ada data keuangan."/> : weddings.map((w)=><FinanceRow key={w.id} wedding={w} onDetail={openDetail}/>) }
