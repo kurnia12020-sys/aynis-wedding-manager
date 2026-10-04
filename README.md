@@ -27,3 +27,10 @@ Upload seluruh isi project ke repository `aynis-wedding-manager`, commit ke `mai
 
 ## V4.21 Visual Refresh
 Modern bridal premium palette: ivory, dusty rose, soft mauve, mocha, champagne accent. No business logic changes.
+
+V4.22 - PWA / Add to Home Screen
+- Manifest PWA + standalone mode
+- AYNIS app icons (iPhone/Android)
+- Apple Web App metadata
+- Safe service worker registration
+- No accounting/database logic changed
