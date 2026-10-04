@@ -1,6 +1,6 @@
-# AYNIS Wedding Manager V4.3 — Admin Save & Multi-user Sync
+# AYNIS Wedding Manager V4.4 — Admin Save & Multi-user Sync
 
-Perbaikan V4.3:
+Perbaikan V4.4:
 - Admin dapat menambah dan menyimpan Wedding baru.
 - Simpan Wedding menulis langsung ke Supabase sebelum form ditutup.
 - Sinkronisasi realtime Owner/Admin untuk mengurangi data tertimpa antar perangkat.

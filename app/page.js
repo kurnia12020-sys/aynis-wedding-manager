@@ -1077,7 +1077,7 @@ export default function Page() {
   }
 
   if (!session) {
-    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.3 TEAM</small><h1>{authMode === "signup" ? "Buat / Aktivasi Akun" : "Masuk ke Aynis"}</h1><p>Owner, Admin, dan Staff masuk dari link yang sama. Hak akses mengikuti akun masing-masing.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
+    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.4 TEAM</small><h1>{authMode === "signup" ? "Buat / Aktivasi Akun" : "Masuk ke Aynis"}</h1><p>Owner, Admin, dan Staff masuk dari link yang sama. Hak akses mengikuti akun masing-masing.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
   }
 
   if (cloudState === "no-access") {
@@ -1128,7 +1128,7 @@ export default function Page() {
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.3 TEAM ACCESS</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.4 TEAM ACCESS</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
         <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
@@ -1464,7 +1464,7 @@ function VendorCard({ vendor, readOnly=false, onWhatsApp, onEdit, onDelete }) {
   </article>;
 }
 
-function WeddingDetail({ wedding, readOnly=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onWhatsApp }) {
+function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onWhatsApp }) {
   const f = financials(wedding);
   return <section className="detailPage">
     <div className="detailTopActions"><button className="backButton" onClick={onBack}><ArrowLeft size={17}/> Semua Wedding</button>{!readOnly&&<div><button onClick={onEdit}><Pencil size={15}/> Edit</button>{(f.remaining===0||wedding.completed)&&<button className={wedding.completed?"":"completeButton"} onClick={onToggleComplete}><CheckCircle2 size={15}/> {wedding.completed?"Buka Lagi":"Tandai Selesai"}</button>}<button className="danger" onClick={onDelete}><Trash2 size={15}/> Hapus</button></div>}</div>
@@ -1476,21 +1476,21 @@ function WeddingDetail({ wedding, readOnly=false, onBack, onEdit, onDelete, onPa
 
     <section className="packagePanel panel">
       <div className="sectionTitle"><div><small>2 · PAKET</small><h3>{wedding.packageName}</h3></div><Package size={24}/></div>
-      <div className="summaryFour"><MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Status" value={paymentStatus(wedding)}/></div>
+      {canViewFinance ? <div className="summaryFour"><MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Status" value={paymentStatus(wedding)}/></div> : <div className="summaryFour"><MiniStat label="Status" value={paymentStatus(wedding)}/></div>}
     </section>
 
     <section className="panel">
-      <div className="panelHeader compactHeader"><div><small>3 · ISI PAKET / VENDOR</small><h2>Vendor & Biaya</h2><p>Biaya aktual khusus wedding ini. Pembayaran vendor tersimpan sebagai riwayat.</p></div>{!readOnly&&<button className="primary compact" onClick={onAddItem}><Plus size={16}/> Tambah Item</button>}</div>
-      {(wedding.packageItems||[]).length===0?<Empty text="Belum ada isi paket atau pengeluaran."/>:<div className="expenseList">{(wedding.packageItems||[]).map((item)=>{
+      <div className="panelHeader compactHeader"><div><small>3 · ISI PAKET / VENDOR</small><h2>{canViewFinance ? "Vendor & Biaya" : "Vendor"}</h2><p>{canViewFinance ? "Biaya aktual khusus wedding ini. Pembayaran vendor tersimpan sebagai riwayat." : "Daftar vendor untuk kebutuhan operasional wedding. Nominal pengeluaran hanya dapat dilihat Owner."}</p></div>{!readOnly&&canViewFinance&&<button className="primary compact" onClick={onAddItem}><Plus size={16}/> Tambah Item</button>}</div>
+      {(wedding.packageItems||[]).length===0?<Empty text="Belum ada isi paket atau vendor."/>:<div className="expenseList">{(wedding.packageItems||[]).map((item)=>{
         const history = vendorPaymentHistory(item, wedding.date || "");
         const remainingVendor = Math.max(Number(item.actualCost||0)-vendorPaid(item),0);
         return <div className="expenseCard" key={item.id}>
-          <div className="expenseRow"><div className="expenseMain"><small>{item.category}</small><b>{item.name}</b>{item.notes&&<span>{item.notes}</span>}</div><div className="expenseMoney"><b>{rp(item.actualCost)}</b><span>Dibayar {rp(vendorPaid(item))}</span><i className={`vendorStatus ${itemStatus(item)==="Lunas"?"paid":""}`}>{itemStatus(item)}</i></div>{!readOnly&&<div className="iconActions"><button onClick={()=>onEditItem(item)}><Pencil size={15}/></button><button className="danger" onClick={()=>onDeleteItem(item.id)}><Trash2 size={15}/></button></div>}</div>
-          <div className="vendorPaymentBar"><div><small>SISA VENDOR</small><b>{rp(remainingVendor)}</b></div>{!readOnly&&remainingVendor>0&&<button onClick={()=>onAddVendorPayment(item)}><Plus size={14}/> Bayar Vendor</button>}</div>
-          {history.length>0&&<div className="vendorPaymentHistory">{history.map((payment)=><div className="vendorPaymentRow" key={payment.id}><div><b>{payment.label||"Pembayaran Vendor"}</b><span>{payment.date?formatDate(payment.date):""}{payment.notes?` · ${payment.notes}`:""}</span></div><strong>{rp(payment.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditVendorPayment(item,payment)}><Pencil size={13}/></button><button className="iconDanger" onClick={()=>onDeleteVendorPayment(item.id,payment.id)}><Trash2 size={13}/></button></div>}</div>)}</div>}
+          <div className="expenseRow"><div className="expenseMain"><small>{item.category}</small><b>{item.name}</b>{item.notes&&<span>{item.notes}</span>}</div>{canViewFinance&&<div className="expenseMoney"><b>{rp(item.actualCost)}</b><span>Dibayar {rp(vendorPaid(item))}</span><i className={`vendorStatus ${itemStatus(item)==="Lunas"?"paid":""}`}>{itemStatus(item)}</i></div>}{!readOnly&&canViewFinance&&<div className="iconActions"><button onClick={()=>onEditItem(item)}><Pencil size={15}/></button><button className="danger" onClick={()=>onDeleteItem(item.id)}><Trash2 size={15}/></button></div>}</div>
+          {canViewFinance&&<div className="vendorPaymentBar"><div><small>SISA VENDOR</small><b>{rp(remainingVendor)}</b></div>{!readOnly&&remainingVendor>0&&<button onClick={()=>onAddVendorPayment(item)}><Plus size={14}/> Bayar Vendor</button>}</div>}
+          {canViewFinance&&history.length>0&&<div className="vendorPaymentHistory">{history.map((payment)=><div className="vendorPaymentRow" key={payment.id}><div><b>{payment.label||"Pembayaran Vendor"}</b><span>{payment.date?formatDate(payment.date):""}{payment.notes?` · ${payment.notes}`:""}</span></div><strong>{rp(payment.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditVendorPayment(item,payment)}><Pencil size={13}/></button><button className="iconDanger" onClick={()=>onDeleteVendorPayment(item.id,payment.id)}><Trash2 size={13}/></button></div>}</div>)}</div>}
         </div>;
       })}</div>}
-      <div className="expenseTotals"><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/></div>
+      {canViewFinance&&<div className="expenseTotals"><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/></div>}
     </section>
 
     <section className="panel">
