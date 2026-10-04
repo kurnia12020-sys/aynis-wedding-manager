@@ -49,7 +49,10 @@ const emptyWedding = {
   initialPayment: "",
   notes: "",
   packageItems: [],
+  addOns: [],
 };
+
+const emptyAddOn = { id: null, name: "", qty: "1", price: "", notes: "", paid: false };
 
 const emptyPackage = { id: null, name: "", price: "", notes: "", active: true };
 
@@ -110,8 +113,16 @@ function shiftDate(date, days) {
   return d.toISOString().slice(0, 10);
 }
 
+function addOnTotal(wedding) {
+  return (wedding?.addOns || []).reduce((sum, item) => {
+    const qty = Math.max(Number(item.qty || 1), 1);
+    return sum + qty * Number(item.price || 0);
+  }, 0);
+}
+
 function netDealPrice(wedding) {
-  return Math.max(Number(wedding?.dealPrice || 0) - Number(wedding?.discount || 0), 0);
+  const baseNet = Math.max(Number(wedding?.dealPrice || 0) - Number(wedding?.discount || 0), 0);
+  return baseNet + addOnTotal(wedding);
 }
 
 function defaultPaymentSchedule(wedding, existing = null) {
@@ -229,13 +240,17 @@ function totalExpensesPaid(wedding) {
 function financials(wedding) {
   const deal = Number(wedding.dealPrice || 0);
   const discount = Math.max(Number(wedding.discount || 0), 0);
-  const netDeal = Math.max(deal - discount, 0);
+  const baseNetDeal = Math.max(deal - discount, 0);
+  const addOns = addOnTotal(wedding);
+  const netDeal = baseNetDeal + addOns;
   const incoming = totalPayments(wedding);
   const expenses = totalExpenses(wedding);
   const expensesPaid = totalExpensesPaid(wedding);
   return {
     deal,
     discount,
+    baseNetDeal,
+    addOns,
     netDeal,
     incoming,
     remaining: Math.max(netDeal - incoming, 0),
@@ -314,6 +329,10 @@ export default function Page() {
   const [packageOpen, setPackageOpen] = useState(false);
   const [packageWeddingId, setPackageWeddingId] = useState(null);
   const [packageForm, setPackageForm] = useState(emptyPackageItem);
+
+  const [addOnOpen, setAddOnOpen] = useState(false);
+  const [addOnWeddingId, setAddOnWeddingId] = useState(null);
+  const [addOnForm, setAddOnForm] = useState(emptyAddOn);
 
   const [packageMasterOpen, setPackageMasterOpen] = useState(false);
   const [packageMasterForm, setPackageMasterForm] = useState(emptyPackage);
@@ -698,6 +717,7 @@ export default function Page() {
         paidAmount: String(vendorPaid(item) ?? ""),
         vendorPayments: Array.isArray(item.vendorPayments) ? item.vendorPayments : [],
       })),
+      addOns: (wedding.addOns || []).map((item) => ({ ...item })),
     });
     setWeddingOpen(true);
   }
@@ -762,8 +782,9 @@ export default function Page() {
       notes: weddingForm.notes.trim(),
       completed: old?.completed || false,
       payments: old?.payments || [],
-      paymentSchedule: defaultPaymentSchedule({ dealPrice, discount, date: weddingForm.date }, old?.paymentSchedule),
+      paymentSchedule: defaultPaymentSchedule({ dealPrice, discount, date: weddingForm.date, addOns: old?.addOns || [] }, old?.paymentSchedule),
       packageItems: normalizedItems,
+      addOns: old?.addOns || [],
       createdAt: old?.createdAt || new Date().toISOString(),
     };
 
@@ -1132,6 +1153,61 @@ export default function Page() {
     ));
   }
 
+  function openNewAddOn(wedding) {
+    setAddOnWeddingId(wedding.id);
+    setAddOnForm(emptyAddOn);
+    setAddOnOpen(true);
+  }
+
+  function openEditAddOn(wedding, item) {
+    setAddOnWeddingId(wedding.id);
+    setAddOnForm({
+      id: item.id,
+      name: item.name || "",
+      qty: String(item.qty || 1),
+      price: String(item.price || ""),
+      notes: item.notes || "",
+      paid: Boolean(item.paid),
+    });
+    setAddOnOpen(true);
+  }
+
+  function saveAddOn(event) {
+    event.preventDefault();
+    if (!addOnForm.name.trim()) return alert("Nama Add-on wajib diisi.");
+    const qty = Math.max(Number(addOnForm.qty || 1), 1);
+    const price = Number(addOnForm.price || 0);
+    if (price < 0) return alert("Harga Add-on tidak valid.");
+    if (addOnForm.id && !confirm("Simpan perubahan pada Add-on ini?")) return;
+    const record = {
+      id: addOnForm.id || Date.now(),
+      name: addOnForm.name.trim(),
+      qty,
+      price,
+      notes: addOnForm.notes.trim(),
+      paid: Boolean(addOnForm.paid),
+    };
+    setWeddings((current) => current.map((w) => {
+      if (String(w.id) !== String(addOnWeddingId)) return w;
+      const list = w.addOns || [];
+      const exists = list.some((x) => String(x.id) === String(record.id));
+      const updated = { ...w, addOns: exists ? list.map((x) => String(x.id) === String(record.id) ? record : x) : [...list, record] };
+      const seeded = defaultPaymentSchedule(updated, updated.paymentSchedule);
+      return { ...updated, paymentSchedule: recalculateFollowingPayments(updated, seeded, "dp1") };
+    }));
+    setAddOnOpen(false);
+  }
+
+  function deleteAddOn(weddingId, addOnId) {
+    if (!confirm("Hapus Add-on ini? Total tagihan klien akan dihitung ulang.")) return;
+    setWeddings((current) => current.map((w) => {
+      if (String(w.id) !== String(weddingId)) return w;
+      const updated = { ...w, addOns: (w.addOns || []).filter((x) => String(x.id) !== String(addOnId)) };
+      const seeded = defaultPaymentSchedule(updated, updated.paymentSchedule);
+      return { ...updated, paymentSchedule: recalculateFollowingPayments(updated, seeded, "dp1") };
+    }));
+  }
+
   function openNewPackageMaster() {
     setPackageMasterForm(emptyPackage);
     setPackageMasterOpen(true);
@@ -1297,7 +1373,7 @@ export default function Page() {
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.8 PAYMENT HISTORY FIX</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.13 ADD-ON LUAR PAKET</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
         <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
@@ -1380,6 +1456,9 @@ export default function Page() {
           onAddItem={() => openNewPackageItem(selectedWedding)}
           onEditItem={(item) => openEditPackageItem(selectedWedding, item)}
           onDeleteItem={(itemId) => deletePackageItem(selectedWedding.id, itemId)}
+          onAddAddOn={() => openNewAddOn(selectedWedding)}
+          onEditAddOn={(item) => openEditAddOn(selectedWedding, item)}
+          onDeleteAddOn={(itemId) => deleteAddOn(selectedWedding.id, itemId)}
           onAddVendorPayment={(item) => openVendorPayment(selectedWedding, item)}
           onEditVendorPayment={(item, payment) => openVendorPayment(selectedWedding, item, payment)}
           onDeleteVendorPayment={(itemId, paymentId) => deleteVendorPayment(selectedWedding.id, itemId, paymentId)}
@@ -1583,6 +1662,23 @@ export default function Page() {
         </Modal>
       )}
 
+      {addOnOpen && (
+        <Modal onClose={()=>setAddOnOpen(false)}>
+          <form className="smallForm" onSubmit={saveAddOn}>
+            <ModalClose onClick={()=>setAddOnOpen(false)}/><small>ADD-ON DI LUAR PAKET</small><h3>{addOnForm.id?"Edit Add-on":"Tambah Add-on"}</h3>
+            <Field label="Nama Add-on"><input value={addOnForm.name} onChange={(e)=>setAddOnForm({...addOnForm,name:e.target.value})} placeholder="Contoh: Tambah Makeup Ibu / Hijabdo / Retouch"/></Field>
+            <div className="formTwoCols">
+              <Field label="Jumlah"><input type="number" min="1" inputMode="numeric" value={addOnForm.qty} onChange={(e)=>setAddOnForm({...addOnForm,qty:e.target.value})}/></Field>
+              <Field label="Harga per Item"><input type="text" inputMode="numeric" value={formatMoneyInput(addOnForm.price)} onChange={(e)=>setAddOnForm({...addOnForm,price:onlyDigits(e.target.value)})} placeholder="500.000"/>{addOnForm.price&&<em>{rp(addOnForm.price)}</em>}</Field>
+            </div>
+            <Field label="Catatan"><textarea rows={3} value={addOnForm.notes} onChange={(e)=>setAddOnForm({...addOnForm,notes:e.target.value})} placeholder="Keterangan tambahan untuk klien"/></Field>
+            <label className="checkLine"><input type="checkbox" checked={addOnForm.paid} onChange={(e)=>setAddOnForm({...addOnForm,paid:e.target.checked})}/><span>Sudah dibayar klien <small>(status saja — uang masuk tetap dicatat di Riwayat Pembayaran)</small></span></label>
+            <div className="editPaymentHint"><small>TOTAL ADD-ON</small><b>{rp(Math.max(Number(addOnForm.qty||1),1)*Number(addOnForm.price||0))}</b><span>Biaya modal tidak dicatat di sini. Masukkan biaya melalui Vendor/Pengeluaran.</span></div>
+            <button className="primary full" type="submit"><CheckCircle2 size={18}/> Simpan Add-on</button>
+          </form>
+        </Modal>
+      )}
+
       {packageMasterOpen && (
         <Modal onClose={()=>setPackageMasterOpen(false)}>
           <form className="smallForm" onSubmit={savePackageMaster}>
@@ -1658,7 +1754,7 @@ function VendorCard({ vendor, readOnly=false, onWhatsApp, onEdit, onDelete }) {
   </article>;
 }
 
-function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onWhatsApp }) {
+function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onWhatsApp }) {
   const f = financials(wedding);
   const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
   const scheduledPaid = schedule.reduce((sum, stage) => sum + (stage.paid ? Number(stage.amount || 0) : 0), 0);
@@ -1685,7 +1781,7 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
 
     <section className="packagePanel panel">
       <div className="sectionTitle"><div><small>2 · PAKET</small><h3>{wedding.packageName}</h3></div><Package size={24}/></div>
-      {canViewFinance ? <div className="summaryFour"><MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Status" value={paymentStatus(wedding)}/></div> : <div className="summaryFour"><MiniStat label="Status" value={paymentStatus(wedding)}/></div>}
+      {canViewFinance ? <div className="summaryFour"><MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih Paket" value={rp(f.baseNetDeal)}/><MiniStat label="Total Add-on" value={rp(f.addOns)}/><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Status" value={paymentStatus(wedding)}/></div> : <div className="summaryFour"><MiniStat label="Status" value={paymentStatus(wedding)}/></div>}
     </section>
 
     <section className="panel">
@@ -1702,8 +1798,14 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
       {canViewFinance&&<div className="expenseTotals"><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/></div>}
     </section>
 
+    <section className="panel addonPanel">
+      <div className="panelHeader compactHeader"><div><small>4 · ADD-ON DI LUAR PAKET</small><h2>Add-on Klien</h2><p>Tambahan layanan/barang di luar paket utama. Biaya modal tetap dicatat melalui Vendor/Pengeluaran.</p></div>{!readOnly&&<button className="primary compact" onClick={onAddAddOn}><Plus size={16}/> Tambah Add-on</button>}</div>
+      {(wedding.addOns||[]).length===0?<Empty text="Belum ada Add-on di luar paket."/>:<div className="addonList">{(wedding.addOns||[]).map((item)=>{const total=Math.max(Number(item.qty||1),1)*Number(item.price||0);return <div className="addonCard" key={item.id}><div className="addonMain"><small>ADD-ON · {item.qty||1}×</small><b>{item.name}</b>{item.notes&&<span>{item.notes}</span>}<em className={item.paid?"addonPaid":""}>{item.paid?"Sudah dibayar":"Belum dibayar"}</em></div><div className="addonPrice"><small>Harga Klien</small><b>{rp(total)}</b>{Number(item.qty||1)>1&&<span>{rp(item.price)} / item</span>}</div>{!readOnly&&<div className="iconActions"><button onClick={()=>onEditAddOn(item)}><Pencil size={15}/></button><button className="danger" onClick={()=>onDeleteAddOn(item.id)}><Trash2 size={15}/></button></div>}</div>})}</div>}
+      <div className="addonTotalBar"><span>Total Add-on</span><b>{rp(f.addOns)}</b></div>
+    </section>
+
     <section className="panel">
-      <div className="panelHeader compactHeader"><div><small>4 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal mengikuti Harga Deal. DP manual dan setiap cicilan/catatan pembayaran masuk otomatis mengurangi sisa DP berikutnya sampai pelunasan.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
+      <div className="panelHeader compactHeader"><div><small>5 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal mengikuti Total Tagihan (Deal Bersih + Add-on). DP manual dan setiap cicilan/catatan pembayaran masuk otomatis mengurangi sisa DP berikutnya sampai pelunasan.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
       <div className="paymentScheduleList">
         {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
           <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={stage.paid?"Sudah dibayar":"Belum dibayar"}>{stage.paid?<CheckCircle2 size={22}/>:<span/>}</button>
@@ -1716,11 +1818,11 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
     </section>
 
     {canViewFinance && <section className="panel profitPanel">
-      <div className="sectionTitle"><div><small>5–6 · PENGELUARAN & RINGKASAN KEUNTUNGAN</small><h3>Posisi Keuangan Wedding</h3></div><TrendingUp size={24}/></div>
+      <div className="sectionTitle"><div><small>6–7 · PENGELUARAN & RINGKASAN KEUNTUNGAN</small><h3>Posisi Keuangan Wedding</h3></div><TrendingUp size={24}/></div>
       <div className="financialSummaryGrid">
-        <MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/><MiniStat label="Estimasi Untung" value={rp(f.profit)} strong/><MiniStat label="Uang Pegangan Sekarang" value={rp(f.cashOnHand)} strong/>
+        <MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih Paket" value={rp(f.baseNetDeal)}/><MiniStat label="Total Add-on" value={rp(f.addOns)}/><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/><MiniStat label="Estimasi Untung" value={rp(f.profit)} strong/><MiniStat label="Uang Pegangan Sekarang" value={rp(f.cashOnHand)} strong/>
       </div>
-      <p className="formula">Estimasi Untung = Deal Bersih − Total Pengeluaran · Uang Pegangan = Uang Masuk − Pengeluaran yang sudah dibayar.</p>
+      <p className="formula">Estimasi Untung = Total Tagihan − Total Pengeluaran · Uang Pegangan = Uang Masuk − Pengeluaran yang sudah dibayar.</p>
     </section>}
   </section>;
 }
