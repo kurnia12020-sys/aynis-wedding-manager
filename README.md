@@ -15,3 +15,9 @@ V4.1 menambahkan workspace bersama dan role Owner/Admin/Staff di atas Supabase C
 5. Setelah login, role diterapkan otomatis.
 
 Database utama tetap Supabase. Jangan taruh secret/service role key di browser atau NEXT_PUBLIC env.
+
+## V4.2 Team Access
+- Owner: full access including Finance and Team management.
+- Admin: operational editing only; business finance summary/profit is hidden.
+- Staff: read-only.
+- Finance tab is visible only to Owner or members explicitly granted view_finance.

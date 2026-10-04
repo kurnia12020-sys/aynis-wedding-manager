@@ -1024,7 +1024,7 @@ export default function Page() {
   }
 
   if (!session) {
-    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.1 TEAM</small><h1>{authMode === "signup" ? "Buat / Aktivasi Akun" : "Masuk ke Aynis"}</h1><p>Owner, Admin, dan Staff masuk dari link yang sama. Hak akses mengikuti akun masing-masing.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
+    return <main className="cloudGate"><form className="cloudCard authCard" onSubmit={handleAuth}><Cloud size={34}/><small>AYNIS ANIS MAKEUP · V4.2 TEAM</small><h1>{authMode === "signup" ? "Buat / Aktivasi Akun" : "Masuk ke Aynis"}</h1><p>Owner, Admin, dan Staff masuk dari link yang sama. Hak akses mengikuti akun masing-masing.</p><label>Email<input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="email@contoh.com" autoComplete="email"/></label><label>Password<input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Minimal 6 karakter" autoComplete={authMode === "signup" ? "new-password" : "current-password"}/></label>{cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}<button className="primary full" type="submit" disabled={authBusy}>{authBusy ? "Memproses…" : authMode === "signup" ? "Buat Akun" : "Masuk"}</button><button className="authSwitch" type="button" onClick={()=>{setAuthMode(authMode === "signup" ? "signin" : "signup");setCloudMessage("");}}>{authMode === "signup" ? "Sudah punya akun? Masuk" : "Belum punya akun? Buat akun"}</button></form></main>;
   }
 
   if (cloudState === "no-access") {
@@ -1033,6 +1033,7 @@ export default function Page() {
 
   const isOwner = membership?.role === "owner";
   const canEditData = membership?.role === "owner" || membership?.role === "admin";
+  const canViewFinance = membership?.role === "owner" || membership?.permissions?.view_finance === true;
 
   async function inviteMember(event) {
     event.preventDefault();
@@ -1042,8 +1043,8 @@ export default function Page() {
     try {
       const email = inviteEmail.trim().toLowerCase();
       const permissions = inviteRole === "admin"
-        ? { edit_data: true, manage_users: false }
-        : { edit_data: false, manage_users: false };
+        ? { edit_data: true, view_finance: false, manage_users: false }
+        : { edit_data: false, view_finance: false, manage_users: false };
       const { error } = await supabase.from("workspace_members").insert({
         workspace_id: workspaceId,
         invited_email: email,
@@ -1074,7 +1075,7 @@ export default function Page() {
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.1 TEAM FINANCE</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.2 TEAM ACCESS</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
         <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
@@ -1091,14 +1092,17 @@ export default function Page() {
             {canEditData&&<button className="primary" onClick={openNewWedding}><Plus size={18}/> Tambah Wedding</button>}
           </section>
 
-          <section className="stats statsSix">
+          {canViewFinance ? <section className="stats statsSix">
             <Card t="Wedding" v={weddings.length} s="Total data tersimpan" />
             <Card t="Harga Deal" v={rp(totals.deal)} s="Total nilai wedding" />
             <Card t="Uang Masuk" v={rp(totals.incoming)} s="Pembayaran klien" />
             <Card t="Sisa Tagihan" v={rp(totals.remaining)} s="Belum dibayar klien" />
             <Card t="Pengeluaran" v={rp(totals.expenses)} s="Total modal / vendor" />
             <Card t="Estimasi Untung" v={rp(totals.profit)} s={`Pegangan ${rp(totals.cashOnHand)}`} highlight />
-          </section>
+          </section> : <section className="stats adminStats">
+            <Card t="Wedding" v={weddings.length} s="Total data tersimpan" />
+            <Card t="Akses" v="Admin" s="Data keuangan bisnis disembunyikan" />
+          </section>}
 
           <div className="sectionHead">
             <div><small>AGENDA TERDEKAT</small><h3>Wedding Mendatang</h3></div>
@@ -1141,10 +1145,11 @@ export default function Page() {
           onDeleteVendorPayment={(itemId, paymentId) => deleteVendorPayment(selectedWedding.id, itemId, paymentId)}
           onDeletePayment={(paymentId) => deletePayment(selectedWedding.id, paymentId)}
           onWhatsApp={() => openWhatsApp(selectedWedding.whatsapp)}
+          canViewFinance={canViewFinance}
         />
       )}
 
-      {tab === "Keuangan" && (
+      {tab === "Keuangan" && canViewFinance && (
         <>
           <section className="panel financeIntro"><small>KEUANGAN</small><h2>Ringkasan Bisnis</h2><p>Semua angka dihitung otomatis dari wedding, pembayaran klien, dan isi paket/vendor.</p></section>
           <section className="stats statsSix">
@@ -1204,7 +1209,7 @@ export default function Page() {
       )}
 
       <nav>
-        {[["Home",Home],["Wedding",HeartHandshake],["Keuangan",WalletCards],["Kalender",CalendarDays],["Vendor",Store]].map(([name,Icon])=><button key={name} className={tab===name?"active":""} onClick={()=>{setTab(name);if(name!=="Wedding")setSelectedWeddingId(null);}}><Icon size={20}/><span>{name}</span></button>)}
+{[["Home",Home],["Wedding",HeartHandshake],...(canViewFinance?[["Keuangan",WalletCards]]:[]),["Kalender",CalendarDays],["Vendor",Store]].map(([name,Icon])=><button key={name} className={tab===name?"active":""} onClick={()=>{setTab(name);if(name!=="Wedding")setSelectedWeddingId(null);}}><Icon size={20}/><span>{name}</span></button>)}
       </nav>
 
       {accountOpen && (
@@ -1221,8 +1226,8 @@ export default function Page() {
               </form>
               {cloudMessage&&<div className="cloudNotice">{cloudMessage}</div>}
               <div className="memberList">{members.map((m)=><div className="memberRow" key={m.id}><div className="memberIcon"><Users size={17}/></div><div><b>{m.invited_email || (m.user_id===session?.user?.id?session?.user?.email:"Pengguna aktif")}</b><span>{m.role.toUpperCase()} · {m.status === "active" ? "Aktif" : "Menunggu aktivasi"}</span></div>{m.role!=="owner"&&<button className="iconDanger" onClick={()=>removeMember(m.id)}><Trash2 size={14}/></button>}</div>)}</div>
-              <div className="roleHelp"><b>Batas akses</b><span>Owner: semua fitur + kelola pengguna</span><span>Admin: kelola operasional, tanpa manajemen pengguna</span><span>Staff: hanya melihat data</span></div>
-            </> : <div className="roleHelp"><b>Batas akses Anda</b><span>{membership?.role === "admin" ? "Admin dapat mengelola data operasional, tetapi tidak dapat menambah/menghapus pengguna." : "Staff hanya dapat melihat data dan agenda tanpa mengubahnya."}</span></div>}
+              <div className="roleHelp"><b>Batas akses</b><span>Owner: semua fitur + kelola pengguna</span><span>Admin: kelola operasional, tanpa ringkasan keuangan/profit & tanpa manajemen pengguna</span><span>Staff: hanya melihat data</span></div>
+            </> : <div className="roleHelp"><b>Batas akses Anda</b><span>{membership?.role === "admin" ? "Admin dapat mengelola data operasional. Ringkasan keuangan bisnis/profit dan manajemen pengguna disembunyikan." : "Staff hanya dapat melihat data dan agenda tanpa mengubahnya."}</span></div>}
           </div>
         </Modal>
       )}
@@ -1440,13 +1445,13 @@ function WeddingDetail({ wedding, readOnly=false, onBack, onEdit, onDelete, onPa
       {(wedding.payments||[]).length===0?<Empty text="Belum ada pembayaran klien."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div>}
     </section>
 
-    <section className="panel profitPanel">
+    {canViewFinance && <section className="panel profitPanel">
       <div className="sectionTitle"><div><small>5–6 · PENGELUARAN & RINGKASAN KEUNTUNGAN</small><h3>Posisi Keuangan Wedding</h3></div><TrendingUp size={24}/></div>
       <div className="financialSummaryGrid">
         <MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/><MiniStat label="Estimasi Untung" value={rp(f.profit)} strong/><MiniStat label="Uang Pegangan Sekarang" value={rp(f.cashOnHand)} strong/>
       </div>
       <p className="formula">Estimasi Untung = Harga Deal − Total Pengeluaran · Uang Pegangan = Uang Masuk − Pengeluaran yang sudah dibayar.</p>
-    </section>
+    </section>}
   </section>;
 }
 
