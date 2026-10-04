@@ -300,6 +300,54 @@ function totalExpensesPaid(wedding) {
   return (wedding.packageItems || []).reduce((sum, item) => sum + vendorPaid(item), 0);
 }
 
+function weddingChecklistState(wedding) {
+  const f = financials(wedding);
+  const manual = wedding.checklist || {};
+  const paidRatio = f.netDeal > 0 ? f.incoming / f.netDeal : 0;
+  const hasPackage = Boolean((wedding.packageName || "").trim());
+  const hasClientData = Boolean((wedding.couple || "").trim() && wedding.date);
+  const hasVendors = (wedding.packageItems || []).length > 0;
+  return {
+    booking: f.incoming >= Math.min(1000000, Math.max(f.netDeal, 0)) && f.incoming > 0,
+    packageSelected: hasPackage,
+    clientData: manual.clientData ?? hasClientData,
+    vendorsReady: manual.vendorsReady ?? hasVendors,
+    fittingScheduled: Boolean(manual.fittingScheduled),
+    fittingDone: Boolean(manual.fittingDone),
+    dp30: paidRatio >= 0.30 || f.remaining <= 0,
+    dp70: paidRatio >= 0.70 || f.remaining <= 0,
+    readinessChecked: Boolean(manual.readinessChecked),
+    dayConfirmed: Boolean(manual.dayConfirmed),
+    paidFull: f.remaining <= 0 && f.netDeal > 0,
+    completed: Boolean(wedding.completed),
+  };
+}
+
+function checklistTimeline(wedding) {
+  const state = weddingChecklistState(wedding);
+  const weddingDate = wedding.date ? new Date(`${wedding.date}T00:00:00`) : null;
+  const dateShift = (days) => {
+    if (!weddingDate) return "";
+    const d = new Date(weddingDate);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  return [
+    { key:"booking", label:"Booking / DP awal", auto:true, done:state.booking, note:"Minimal Rp1.000.000 untuk keep tanggal" },
+    { key:"packageSelected", label:"Paket dipilih", auto:true, done:state.packageSelected, note:"Mengikuti data paket wedding" },
+    { key:"clientData", label:"Data klien lengkap", done:state.clientData, note:"Nama pengantin & tanggal wedding sudah dicek" },
+    { key:"vendorsReady", label:"Vendor / isi paket lengkap", done:state.vendorsReady, note:"Kebutuhan internal AYNIS sudah dipastikan" },
+    { key:"fittingScheduled", label:"Jadwal fitting ditentukan", done:state.fittingScheduled, note:"Jadwal fitting sudah disepakati dengan klien" },
+    { key:"dp30", label:"DP 30% lunas", auto:true, done:state.dp30, note:"Syarat sebelum fitting baju" },
+    { key:"fittingDone", label:"Fitting selesai", done:state.fittingDone, note:"Fitting baju sudah selesai" },
+    { key:"dp70", label:"Pembayaran mencapai 70%", auto:true, done:state.dp70, date:dateShift(-7), note:"Target H-7 sebelum acara" },
+    { key:"readinessChecked", label:"Cek kesiapan baju / makeup / perlengkapan", done:state.readinessChecked, date:dateShift(-3), note:"Pengecekan internal AYNIS" },
+    { key:"dayConfirmed", label:"Konfirmasi jadwal Hari-H", done:state.dayConfirmed, date:dateShift(-1), note:"Jam & kesiapan tim AYNIS dikonfirmasi" },
+    { key:"weddingDay", label:"Wedding Day", auto:true, done:state.completed, date:wedding.date, note:"Hari pelaksanaan acara" },
+    { key:"paidFull", label:"Pelunasan keseluruhan", auto:true, done:state.paidFull, date:dateShift(2), note:"Maksimal H+2 setelah acara" },
+  ];
+}
+
 function financials(wedding) {
   const deal = Number(wedding.dealPrice || 0);
   const discount = Math.max(Number(wedding.discount || 0), 0);
@@ -1093,6 +1141,15 @@ export default function Page() {
     setWeddings((list) => list.map((w) => String(w.id) === String(wedding.id) ? { ...w, paymentSchedule: fresh } : w));
   }
 
+  function updateWeddingChecklist(weddingId, key, value) {
+    const autoKeys = new Set(["booking","packageSelected","dp30","dp70","paidFull","completed","weddingDay"]);
+    if (autoKeys.has(key)) return;
+    if (!confirm(`${value ? "Tandai selesai" : "Batalkan status selesai"} untuk checklist ini?`)) return;
+    setWeddings((list) => list.map((w) => String(w.id) === String(weddingId)
+      ? { ...w, checklist: { ...(w.checklist || {}), [key]: value } }
+      : w));
+  }
+
   function toggleWeddingComplete(wedding) {
     const f = financials(wedding);
     if (!wedding.completed && f.remaining > 0) {
@@ -1508,7 +1565,7 @@ export default function Page() {
     <main>
       <header>
         <div>
-          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.19 REKENING PEMBAYARAN INVOICE</div>
+          <div className="eyebrow">AYNIS ANIS MAKEUP · V4.20 CHECKLIST & TIMELINE</div>
           <h1>Aynis <span>Wedding Manager</span></h1>
         </div>
         <div className="headerCloud"><span className={`cloudBadge ${cloudState}`}><Cloud size={14}/> {cloudState === "online" ? "Cloud" : "Sync"}</span><button className="logoutButton" onClick={signOutCloud} title="Keluar"><LogOut size={16}/></button><button className="avatar" aria-label="Akun & Pengguna" onClick={()=>setAccountOpen(true)}>AA</button></div>
@@ -1606,6 +1663,7 @@ export default function Page() {
           onUpdatePaymentStage={(stageKey, patch) => updatePaymentScheduleItem(selectedWedding.id, stageKey, patch)}
           onTogglePaymentStage={(stage) => togglePaymentScheduleItem(selectedWedding, stage)}
           onResetPaymentSchedule={() => resetPaymentSchedule(selectedWedding)}
+          onUpdateChecklist={(key,value) => updateWeddingChecklist(selectedWedding.id,key,value)}
           onWhatsApp={() => openWhatsApp(selectedWedding.whatsapp)}
           canViewFinance={canViewFinance}
         />
@@ -1911,7 +1969,7 @@ function VendorCard({ vendor, readOnly=false, onWhatsApp, onEdit, onDelete }) {
   </article>;
 }
 
-function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onWhatsApp }) {
+function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onUpdateChecklist, onWhatsApp }) {
   const f = financials(wedding);
   const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
   const scheduledPaid = schedule.reduce((sum, stage) => sum + (stage.paid ? Number(stage.amount || 0) : 0), 0);
@@ -1947,6 +2005,10 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
   ].filter((payment) => payment.amount > 0);
 
   const selectedReceipt = receiptPayments.find((payment) => payment.id === receiptId) || receiptPayments[receiptPayments.length - 1] || null;
+  const timeline = checklistTimeline(wedding);
+  const checklistDone = timeline.filter((item) => item.done).length;
+  const checklistProgress = timeline.length ? Math.round((checklistDone / timeline.length) * 100) : 0;
+
 
   function openClientDocument(type) {
     if (type === "receipt" && receiptPayments.length === 0) {
@@ -2049,15 +2111,30 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
       <div className="legacyPayments"><div className="legacyTitle"><div><b>Riwayat Pembayaran / Cicilan Tambahan</b><span className="mutedBlock">Setiap cicilan yang masuk otomatis mengurangi sisa DP berikutnya.</span></div>{!readOnly&&f.remaining>0&&<button className="softButton compact" onClick={onPay}><Plus size={15}/> Tambah Cicilan</button>}</div>{(wedding.payments||[]).length===0?<Empty text="Belum ada cicilan atau catatan pembayaran tambahan."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div>}</div>
     </section>
 
+    <section className="panel checklistPanel">
+      <div className="panelHeader compactHeader"><div><small>6 · CHECKLIST & TIMELINE</small><h2>Persiapan AYNIS</h2><p>Fokus pada tugas internal AYNIS. Status pembayaran dihitung otomatis, sedangkan pekerjaan operasional dicentang manual.</p></div><div className="checkProgress"><b>{checklistProgress}%</b><span>{checklistDone}/{timeline.length} selesai</span></div></div>
+      <div className="checkProgressBar"><span style={{width:`${checklistProgress}%`}}/></div>
+      <div className="timelineList">{timeline.map((item)=>{
+        const isManual=!item.auto && item.key!=="weddingDay";
+        const targetDate=item.date?new Date(`${item.date}T00:00:00`):null;
+        const today=new Date(); today.setHours(0,0,0,0);
+        const overdue=Boolean(targetDate && !item.done && targetDate<today);
+        return <div className={`timelineItem ${item.done?"done":overdue?"overdue":""}`} key={item.key}>
+          <button className={`timelineCheck ${item.done?"checked":""}`} disabled={readOnly||!isManual} onClick={()=>isManual&&!readOnly&&onUpdateChecklist(item.key,!item.done)}>{item.done?<CheckCircle2 size={21}/>:<span/>}</button>
+          <div className="timelineBody"><div className="timelineTitle"><b>{item.label}</b>{item.auto&&<em>Otomatis</em>}{overdue&&<i>Terlambat</i>}</div><span>{item.note}</span>{item.date&&<small>{formatDate(item.date)}{item.key==="dp70"?" · H-7":item.key==="readinessChecked"?" · H-3":item.key==="dayConfirmed"?" · H-1":item.key==="paidFull"?" · H+2":""}</small>}</div>
+        </div>;
+      })}</div>
+    </section>
+
     <section className="panel clientDocsPanel">
-      <div className="panelHeader compactHeader"><div><small>6 · DOKUMEN KLIEN</small><h2>Invoice & Kwitansi</h2><p>Dokumen hanya membaca data yang sudah ada dan tidak membuat transaksi baru pada pembukuan.</p></div></div>
+      <div className="panelHeader compactHeader"><div><small>7 · DOKUMEN KLIEN</small><h2>Invoice & Kwitansi</h2><p>Dokumen hanya membaca data yang sudah ada dan tidak membuat transaksi baru pada pembukuan.</p></div></div>
       <div className="clientDocActions"><button className="primary" onClick={()=>openClientDocument("invoice")}><FileText size={17}/> Invoice Tagihan</button><button className="softButton" onClick={()=>openClientDocument("receipt")}><ReceiptText size={17}/> Kwitansi Pembayaran</button></div>
     </section>
 
     {clientDoc && <div className="modal clientDocModal" onMouseDown={(e)=>{if(e.target===e.currentTarget)setClientDoc(null)}}><div className="clientDocBox"><button className="close" onClick={()=>setClientDoc(null)}><X size={17}/></button><small>DOKUMEN KLIEN</small><h3>{clientDoc==="invoice"?"Invoice Tagihan":"Kwitansi Pembayaran"}</h3>{clientDoc==="invoice"?<div className="docPreviewSummary"><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)} strong/></div>:<><label className="receiptSelectLabel">Pilih pembayaran<select value={selectedReceipt?.id||""} onChange={(e)=>setReceiptId(e.target.value)}>{receiptPayments.map((payment)=><option key={payment.id} value={payment.id}>{payment.label} · {rp(payment.amount)}{payment.date?` · ${formatDate(payment.date)}`:""}</option>)}</select></label>{selectedReceipt&&<div className="receiptPreview"><small>KWITANSI UNTUK</small><b>{selectedReceipt.label}</b><strong>{rp(selectedReceipt.amount)}</strong><span>{selectedReceipt.date?formatDate(selectedReceipt.date):"-"}</span></div>}</>}<div className="clientDocButtons"><button className="primary" onClick={()=>printClientDocument(clientDoc)}><Printer size={17}/> Cetak / Simpan PDF</button><button className="waDocButton" onClick={()=>sendDocumentWhatsApp(clientDoc)}><MessageCircle size={17}/> Kirim ke WhatsApp</button></div><p className="docHint">Untuk mengirim file PDF sebagai lampiran, pilih “Simpan sebagai PDF” saat mencetak, lalu lampirkan file tersebut di chat WhatsApp yang terbuka.</p></div></div>}
 
     {canViewFinance && <section className="panel profitPanel">
-      <div className="sectionTitle"><div><small>6–7 · PENGELUARAN & RINGKASAN KEUNTUNGAN</small><h3>Posisi Keuangan Wedding</h3></div><TrendingUp size={24}/></div>
+      <div className="sectionTitle"><div><small>8–9 · PENGELUARAN & RINGKASAN KEUNTUNGAN</small><h3>Posisi Keuangan Wedding</h3></div><TrendingUp size={24}/></div>
       <div className="financialSummaryGrid">
         <MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih Paket" value={rp(f.baseNetDeal)}/><MiniStat label="Total Add-on" value={rp(f.addOns)}/><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/><MiniStat label="Estimasi Untung" value={rp(f.profit)} strong/><MiniStat label="Uang Pegangan Sekarang" value={rp(f.cashOnHand)} strong/>
       </div>
