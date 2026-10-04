@@ -28,6 +28,7 @@ import {
   Users,
   UserPlus,
   ShieldCheck,
+  Search,
 } from "lucide-react";
 
 import { supabase, supabaseConfigured } from "../lib/cloud";
@@ -280,6 +281,7 @@ export default function Page() {
   const [authPassword, setAuthPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [selectedWeddingId, setSelectedWeddingId] = useState(null);
+  const [weddingSearch, setWeddingSearch] = useState("");
   const [membership, setMembership] = useState(null);
   const applyingRemoteRef = useRef(false);
   const [workspaceId, setWorkspaceId] = useState(null);
@@ -1340,8 +1342,26 @@ export default function Page() {
             <div><small>DATA WEDDING</small><h2>Wedding</h2><p>Pilih wedding untuk melihat paket, pembayaran, pengeluaran, dan keuntungan.</p></div>
             {canEditData&&<button className="primary compact" onClick={openNewWedding}><Plus size={17}/> Tambah</button>}
           </div>
+          <div className="weddingSearchBox">
+            <Search size={18}/>
+            <input
+              value={weddingSearch}
+              onChange={(e)=>setWeddingSearch(e.target.value)}
+              placeholder="Cari nama pengantin..."
+              aria-label="Cari nama pengantin"
+            />
+            {weddingSearch && <button type="button" className="searchClear" onClick={()=>setWeddingSearch("")} aria-label="Hapus pencarian"><X size={16}/></button>}
+          </div>
           <section className="list">
-            {weddings.length === 0 ? <Empty text="Belum ada data wedding."/> : [...weddings].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map((w)=><WeddingRow key={w.id} wedding={w} onDetail={openDetail} onWhatsApp={openWhatsApp}/>) }
+            {weddings.length === 0 ? <Empty text="Belum ada data wedding."/> : (()=>{
+              const q = weddingSearch.trim().toLowerCase();
+              const filtered = [...weddings]
+                .filter((w)=>!q || String(w.coupleName || w.name || "").toLowerCase().includes(q))
+                .sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+              return filtered.length === 0
+                ? <Empty text={`Nama pengantin “${weddingSearch}” tidak ditemukan.`}/>
+                : filtered.map((w)=><WeddingRow key={w.id} wedding={w} onDetail={openDetail} onWhatsApp={openWhatsApp}/>);
+            })()}
           </section>
         </section>
       )}
