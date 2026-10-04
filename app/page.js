@@ -1356,7 +1356,7 @@ export default function Page() {
             {weddings.length === 0 ? <Empty text="Belum ada data wedding."/> : (()=>{
               const q = weddingSearch.trim().toLowerCase();
               const filtered = [...weddings]
-                .filter((w)=>!q || String(w.coupleName || w.name || "").toLowerCase().includes(q))
+                .filter((w)=>!q || String(w.couple || w.coupleName || w.name || "").toLowerCase().includes(q))
                 .sort((a,b)=>(a.date||"").localeCompare(b.date||""));
               return filtered.length === 0
                 ? <Empty text={`Nama pengantin “${weddingSearch}” tidak ditemukan.`}/>
