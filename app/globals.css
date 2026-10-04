@@ -258,3 +258,37 @@ nav button{font-size:9px}
   .bigStatus{align-self:flex-start}
   .money{min-width:92px}
 }
+
+/* V4.24 — Bridal Calendar Refresh */
+.calendarPanel{background:linear-gradient(180deg,#fffdfc 0%,#fffaf8 100%)}
+.calendarPanel .panelHeader{padding-bottom:4px;border-bottom:1px solid #f0e4e1}
+.calendarAgenda{background:linear-gradient(135deg,#fff9f8,#f7eeee);border-color:#ead8d8;box-shadow:0 10px 28px rgba(116,76,82,.08)}
+.calendarAgendaHead h3{color:#4e3d40;font-family:Georgia,serif}
+.calendarAgendaHead>span{background:#f3e4e6;color:#8a5f67;padding:5px 9px;border-radius:999px;font-weight:800}
+.agendaCards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.agendaCard{background:linear-gradient(145deg,#fff,#fffafa);border-color:#eadbdd;box-shadow:0 6px 16px rgba(100,67,71,.06);transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
+.agendaCard:hover{transform:translateY(-1px);box-shadow:0 9px 20px rgba(100,67,71,.10);border-color:#d9bdc1}
+.agendaDate{background:linear-gradient(145deg,#edd8db,#f7ebec);color:#8c5c64;border:1px solid #e3c9cd}
+.agendaCard>strong{background:#f8efea;color:#7b5a4c;padding:5px 8px;border-radius:9px}
+.calendarControls{background:#f8f1ef;border:1px solid #eadedb;border-radius:16px;padding:7px;gap:7px}
+.calendarControls select,.monthButton{background:#fffdfc;border-color:#e5d6d2;box-shadow:0 2px 8px rgba(80,54,48,.04)}
+.monthButton{color:#8d6468}
+.dayNames{margin:10px 0 7px;padding:0 3px}
+.dayNames div{color:#8d7376;letter-spacing:.04em}
+.calendarGrid{gap:7px}
+.calendarCell{position:relative;background:#fff;border-color:#eadfdd;border-radius:14px;box-shadow:0 2px 7px rgba(83,55,57,.035);transition:border-color .15s ease,background .15s ease,box-shadow .15s ease}
+.calendarCell.weekend:not(.blank){background:#fdf9f8}
+.calendarCell.hasEvent{background:linear-gradient(180deg,#fff,#fff8f8);border-color:#dfc7ca;box-shadow:0 5px 14px rgba(116,76,82,.07)}
+.calendarCell.today{border:2px solid #ae7b82;background:linear-gradient(180deg,#fff9fa,#f8ebed);box-shadow:0 0 0 3px rgba(174,123,130,.10)}
+.calendarCell.today .dayNumber{background:#9c6972;color:#fff}
+.calendarCell.blank{background:#faf7f6;border-color:#efe7e5;box-shadow:none}
+.dayTop{display:flex;align-items:center;justify-content:space-between;gap:5px}
+.dayNumber{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;color:#59494b;font-weight:800}
+.eventDot{min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:grid;place-items:center;background:#ead5d9;color:#865861;font-size:9px;font-weight:900}
+.calendarEvents{margin-top:7px;gap:5px}
+.calendarEvent{background:linear-gradient(135deg,#ecd8dc,#f4e6e8);border:1px solid #dfc7cb;color:#744f57;border-radius:8px;padding:5px 6px;box-shadow:0 2px 5px rgba(116,76,82,.06)}
+.calendarEvent:active{transform:scale(.98)}
+.moreEvent{color:#97747a;font-weight:700;padding-left:2px}
+.calendarPanel .sectionHead.inside{border-top:1px solid #f0e4e1;padding-top:18px}
+@media(max-width:760px){.agendaCards{grid-template-columns:1fr}.calendarAgenda{padding:12px}.calendarGrid{gap:5px}.calendarCell{border-radius:11px}.dayNumber{width:20px;height:20px;border-radius:7px}.eventDot{min-width:17px;height:17px;font-size:8px}.calendarEvent{padding:4px 5px}.calendarControls{padding:5px;border-radius:13px}}
+@media(max-width:430px){.calendarCell{min-height:62px}.calendarEvents{margin-top:4px;gap:3px}.calendarEvent{font-size:7px}.calendarAgendaHead{align-items:center}.calendarAgendaHead h3{font-size:16px}}

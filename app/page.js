@@ -1723,8 +1723,11 @@ export default function Page() {
             {calendarDays.map((day,index)=>{
               const events = day ? eventsByDay[day] || [] : [];
               const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
-              return <div key={`${day||"blank"}-${index}`} className={`calendarCell ${!day?"blank":""} ${isToday?"today":""}`}>
-                {day && <><b className="dayNumber">{day}</b><div className="calendarEvents">{events.slice(0,2).map((event)=><button key={event.id} className="calendarEvent" onClick={()=>openDetail(event)}>{event.couple}</button>)}{events.length>2&&<span className="moreEvent">+{events.length-2} lagi</span>}</div></>}
+              const dayOfWeek = day ? new Date(year, month, day).getDay() : null;
+              const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+              const hasEvent = events.length > 0;
+              return <div key={`${day||"blank"}-${index}`} className={`calendarCell ${!day?"blank":""} ${isToday?"today":""} ${isWeekend?"weekend":""} ${hasEvent?"hasEvent":""}`}>
+                {day && <><div className="dayTop"><b className="dayNumber">{day}</b>{hasEvent&&<span className="eventDot" aria-label={`${events.length} wedding`}>{events.length}</span>}</div><div className="calendarEvents">{events.slice(0,2).map((event)=><button key={event.id} className="calendarEvent" onClick={()=>openDetail(event)}>{event.couple}</button>)}{events.length>2&&<span className="moreEvent">+{events.length-2} lagi</span>}</div></>}
               </div>;
             })}
           </div>

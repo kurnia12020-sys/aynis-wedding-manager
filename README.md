@@ -34,3 +34,8 @@ V4.23 - PWA / Add to Home Screen
 - Apple Web App metadata
 - Safe service worker registration
 - No accounting/database logic changed
+
+
+## V4.24 — Bridal Calendar Refresh
+- Calendar-only visual refresh: softer bridal palette, clearer today/event/weekend states, more polished upcoming agenda cards.
+- No accounting, Supabase, invoice, payment, or business-logic changes.
