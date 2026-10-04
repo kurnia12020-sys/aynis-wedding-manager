@@ -1,184 +1,942 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  Home,
+  HeartHandshake,
+  WalletCards,
+  CalendarDays,
+  Store,
+  Plus,
+  X,
+  Pencil,
+  Trash2,
+  MessageCircle,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  Banknote,
+} from "lucide-react";
 
-const emptyForm = {
-  client: "",
-  phone: "",
+const WEDDING_KEY = "aynis-weddings-v3";
+const VENDOR_KEY = "aynis-vendors-v1";
+
+const emptyWedding = {
+  id: null,
+  couple: "",
   date: "",
-  location: "",
-  packageName: "",
-  booking: "",
+  place: "",
+  value: "",
   paid: "",
-  status: "DP",
+  whatsapp: "",
   notes: "",
 };
 
-const rupiah = (value) =>
+const emptyVendor = {
+  id: null,
+  name: "",
+  category: "",
+  whatsapp: "",
+  notes: "",
+};
+
+const rp = (n) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     maximumFractionDigits: 0,
-  }).format(Number(value || 0));
+  }).format(Number(n || 0));
 
-export default function Home() {
-  const [weddings, setWeddings] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+const formatDate = (date) => {
+  if (!date) return "-";
+  return new Date(`${date}T00:00:00`).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+
+const monthNames = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+];
+
+const dayNames = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+
+export default function Page() {
+  const today = new Date();
+  const [tab, setTab] = useState("Home");
+  const [items, setItems] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [ready, setReady] = useState(false);
+
+  const [weddingOpen, setWeddingOpen] = useState(false);
+  const [weddingForm, setWeddingForm] = useState(emptyWedding);
+
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentId, setPaymentId] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+
+  const [vendorOpen, setVendorOpen] = useState(false);
+  const [vendorForm, setVendorForm] = useState(emptyVendor);
+
+  const [month, setMonth] = useState(today.getMonth());
+  const [year, setYear] = useState(today.getFullYear());
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("aynis-weddings");
-      if (saved) setWeddings(JSON.parse(saved));
-    } catch {}
+      const newest = localStorage.getItem(WEDDING_KEY);
+      const older2 = localStorage.getItem("aynis-wedding-manager-weddings-v2");
+      const older1 = localStorage.getItem("aynis-wedding-manager-weddings-v1");
+      const raw = newest || older2 || older1;
+
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setItems(
+            parsed.map((x) => {
+              const value = Number(x.value ?? x.booking ?? 0);
+              const paid = Number(x.paid ?? 0);
+              return {
+                id: x.id || Date.now() + Math.random(),
+                couple: x.couple ?? x.client ?? "",
+                date: x.date ?? "",
+                place: x.place ?? x.location ?? "",
+                value,
+                paid,
+                whatsapp: x.whatsapp ?? x.phone ?? "",
+                notes: x.notes ?? "",
+              };
+            })
+          );
+        }
+      }
+
+      const vendorRaw = localStorage.getItem(VENDOR_KEY);
+      if (vendorRaw) {
+        const parsedVendors = JSON.parse(vendorRaw);
+        if (Array.isArray(parsedVendors)) setVendors(parsedVendors);
+      }
+    } catch (error) {
+      console.error("Gagal membaca data lokal", error);
+    } finally {
+      setReady(true);
+    }
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem("aynis-weddings", JSON.stringify(weddings));
-    } catch {}
-  }, [weddings]);
+    if (!ready) return;
+    localStorage.setItem(WEDDING_KEY, JSON.stringify(items));
+  }, [items, ready]);
 
-  const summary = useMemo(() => {
-    const booking = weddings.reduce((n, w) => n + Number(w.booking || 0), 0);
-    const paid = weddings.reduce((n, w) => n + Number(w.paid || 0), 0);
-    return { booking, paid, remaining: Math.max(booking - paid, 0) };
-  }, [weddings]);
+  useEffect(() => {
+    if (!ready) return;
+    localStorage.setItem(VENDOR_KEY, JSON.stringify(vendors));
+  }, [vendors, ready]);
 
-  const saveWedding = (e) => {
-    e.preventDefault();
-    const booking = Number(form.booking || 0);
-    const paid = Number(form.paid || 0);
-    if (!form.client.trim() || !form.date || booking <= 0) {
-      alert("Isi Nama Klien, Tanggal Acara, dan Nilai Booking.");
-      return;
+  const total = useMemo(
+    () => items.reduce((sum, item) => sum + Number(item.value || 0), 0),
+    [items]
+  );
+
+  const paid = useMemo(
+    () => items.reduce((sum, item) => sum + Number(item.paid || 0), 0),
+    [items]
+  );
+
+  const remainingTotal = Math.max(total - paid, 0);
+
+  const upcoming = useMemo(() => {
+    const current = new Date();
+    current.setHours(0, 0, 0, 0);
+    return [...items]
+      .filter((item) => item.date && new Date(`${item.date}T00:00:00`) >= current)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [items]);
+
+  const calendarDays = useMemo(() => {
+    const first = new Date(year, month, 1);
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    let offset = first.getDay();
+    offset = offset === 0 ? 6 : offset - 1;
+
+    const cells = Array(offset).fill(null);
+    for (let d = 1; d <= totalDays; d += 1) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }, [month, year]);
+
+  const eventsByDay = useMemo(() => {
+    const map = {};
+    items.forEach((item) => {
+      if (!item.date) return;
+      const [y, m, d] = item.date.split("-").map(Number);
+      if (y === year && m - 1 === month) {
+        if (!map[d]) map[d] = [];
+        map[d].push(item);
+      }
+    });
+    return map;
+  }, [items, month, year]);
+
+  const currentPaymentWedding = items.find(
+    (item) => String(item.id) === String(paymentId)
+  );
+
+  const weddingRemaining = Math.max(
+    Number(weddingForm.value || 0) - Number(weddingForm.paid || 0),
+    0
+  );
+
+  function openNewWedding() {
+    setWeddingForm(emptyWedding);
+    setWeddingOpen(true);
+  }
+
+  function openEditWedding(item) {
+    setWeddingForm({
+      id: item.id,
+      couple: item.couple,
+      date: item.date,
+      place: item.place,
+      value: String(item.value ?? ""),
+      paid: String(item.paid ?? ""),
+      whatsapp: item.whatsapp ?? "",
+      notes: item.notes ?? "",
+    });
+    setWeddingOpen(true);
+  }
+
+  function saveWedding(event) {
+    event.preventDefault();
+    const value = Number(weddingForm.value || 0);
+    const paidValue = Number(weddingForm.paid || 0);
+
+    if (!weddingForm.couple.trim()) return alert("Nama pengantin wajib diisi.");
+    if (!weddingForm.date) return alert("Tanggal wedding wajib dipilih.");
+    if (!weddingForm.place.trim()) return alert("Lokasi wajib diisi.");
+    if (value <= 0) return alert("Nilai booking harus lebih dari Rp0.");
+    if (paidValue < 0) return alert("Pembayaran tidak boleh negatif.");
+    if (paidValue > value)
+      return alert("Sudah dibayar tidak boleh melebihi nilai booking.");
+
+    const record = {
+      id: weddingForm.id || Date.now(),
+      couple: weddingForm.couple.trim(),
+      date: weddingForm.date,
+      place: weddingForm.place.trim(),
+      value,
+      paid: paidValue,
+      whatsapp: weddingForm.whatsapp.trim(),
+      notes: weddingForm.notes.trim(),
+    };
+
+    setItems((current) => {
+      const exists = current.some((item) => item.id === record.id);
+      return exists
+        ? current.map((item) => (item.id === record.id ? record : item))
+        : [record, ...current];
+    });
+
+    const selected = new Date(`${record.date}T00:00:00`);
+    setMonth(selected.getMonth());
+    setYear(selected.getFullYear());
+    setWeddingOpen(false);
+    setWeddingForm(emptyWedding);
+  }
+
+  function deleteWedding(id) {
+    if (!confirm("Hapus data wedding ini?")) return;
+    setItems((current) => current.filter((item) => item.id !== id));
+  }
+
+  function openPayment(item) {
+    setPaymentId(String(item.id));
+    setPaymentAmount("");
+    setPaymentOpen(true);
+  }
+
+  function savePayment(event) {
+    event.preventDefault();
+    const add = Number(paymentAmount || 0);
+    if (!currentPaymentWedding) return;
+    if (add <= 0) return alert("Nominal pembayaran harus lebih dari Rp0.");
+
+    const remaining = Math.max(
+      Number(currentPaymentWedding.value || 0) -
+        Number(currentPaymentWedding.paid || 0),
+      0
+    );
+
+    if (add > remaining) return alert("Pembayaran melebihi sisa tagihan.");
+
+    setItems((current) =>
+      current.map((item) =>
+        item.id === currentPaymentWedding.id
+          ? { ...item, paid: Number(item.paid || 0) + add }
+          : item
+      )
+    );
+
+    setPaymentOpen(false);
+    setPaymentId("");
+    setPaymentAmount("");
+  }
+
+  function openNewVendor() {
+    setVendorForm(emptyVendor);
+    setVendorOpen(true);
+  }
+
+  function openEditVendor(vendor) {
+    setVendorForm({ ...vendor });
+    setVendorOpen(true);
+  }
+
+  function saveVendor(event) {
+    event.preventDefault();
+    if (!vendorForm.name.trim()) return alert("Nama vendor wajib diisi.");
+    if (!vendorForm.category.trim()) return alert("Kategori vendor wajib diisi.");
+
+    const record = {
+      id: vendorForm.id || Date.now(),
+      name: vendorForm.name.trim(),
+      category: vendorForm.category.trim(),
+      whatsapp: vendorForm.whatsapp.trim(),
+      notes: vendorForm.notes.trim(),
+    };
+
+    setVendors((current) => {
+      const exists = current.some((item) => item.id === record.id);
+      return exists
+        ? current.map((item) => (item.id === record.id ? record : item))
+        : [record, ...current];
+    });
+
+    setVendorOpen(false);
+    setVendorForm(emptyVendor);
+  }
+
+  function deleteVendor(id) {
+    if (!confirm("Hapus vendor ini?")) return;
+    setVendors((current) => current.filter((item) => item.id !== id));
+  }
+
+  function openWhatsApp(phone) {
+    if (!phone) return;
+    let clean = phone.replace(/\D/g, "");
+    if (clean.startsWith("0")) clean = `62${clean.slice(1)}`;
+    window.open(`https://wa.me/${clean}`, "_blank");
+  }
+
+  function prevMonth() {
+    if (month === 0) {
+      setMonth(11);
+      setYear((value) => value - 1);
+    } else {
+      setMonth((value) => value - 1);
     }
-    setWeddings((old) => [
-      {
-        ...form,
-        id: Date.now(),
-        booking,
-        paid,
-        remaining: Math.max(booking - paid, 0),
-      },
-      ...old,
-    ]);
-    setForm(emptyForm);
-    setShowForm(false);
-  };
+  }
 
-  const removeWedding = (id) => {
-    if (confirm("Hapus data wedding ini?")) {
-      setWeddings((old) => old.filter((w) => w.id !== id));
+  function nextMonth() {
+    if (month === 11) {
+      setMonth(0);
+      setYear((value) => value + 1);
+    } else {
+      setMonth((value) => value + 1);
     }
-  };
+  }
+
+  const yearOptions = Array.from(
+    { length: 21 },
+    (_, index) => today.getFullYear() - 5 + index
+  );
 
   return (
-    <main className="shell">
-      <header className="hero">
+    <main>
+      <header>
         <div>
-          <h1>Aynis Wedding Manager</h1>
-          <p>Kelola wedding, keuangan, dan jadwal dalam satu tempat.</p>
+          <div className="eyebrow">AYNIS ANIS MAKEUP</div>
+          <h1>
+            Aynis <span>Wedding Manager</span>
+          </h1>
         </div>
-        <button className="primary" onClick={() => setShowForm(true)}>
-          + Tambah Wedding
+        <button className="avatar" aria-label="Aynis Anis Makeup">
+          AA
         </button>
       </header>
 
-      <section className="stats">
-        <article><span>Wedding Aktif</span><strong>{weddings.length}</strong></article>
-        <article><span>Total Nilai Booking</span><strong>{rupiah(summary.booking)}</strong></article>
-        <article><span>Sudah Dibayar</span><strong>{rupiah(summary.paid)}</strong></article>
-        <article><span>Sisa Tagihan</span><strong>{rupiah(summary.remaining)}</strong></article>
-      </section>
+      {tab === "Home" && (
+        <>
+          <section className="hero">
+            <div>
+              <span>Ringkasan Bisnis</span>
+              <h2>
+                Kelola wedding &amp; keuangan
+                <br />
+                lebih rapi dalam satu tempat.
+              </h2>
+              <p>
+                Dashboard sederhana untuk booking, pembayaran, agenda, dan vendor.
+              </p>
+            </div>
+            <button className="primary" onClick={openNewWedding}>
+              <Plus size={18} /> Tambah Wedding
+            </button>
+          </section>
 
-      <section className="panel">
-        <div className="panelHead">
-          <div><h2>Wedding Terdaftar</h2><p>Daftar acara dan status pembayaran.</p></div>
-          <button className="primary small" onClick={() => setShowForm(true)}>+ Tambah Wedding</button>
-        </div>
+          <section className="stats">
+            <Card t="Nilai Booking" v={rp(total)} s={`${items.length} wedding aktif`} />
+            <Card t="Sudah Dibayar" v={rp(paid)} s="Pembayaran klien" />
+            <Card t="Sisa Tagihan" v={rp(remainingTotal)} s="Perlu ditagih" />
+          </section>
 
-        {weddings.length === 0 ? (
-          <div className="empty">
-            <div className="icon">▣</div>
-            <h3>Belum ada wedding</h3>
-            <p>Tambahkan wedding pertama untuk mulai mengelola bisnis.</p>
-            <button className="primary" onClick={() => setShowForm(true)}>+ Tambah Wedding</button>
+          <div className="sectionHead">
+            <div>
+              <small>AGENDA TERDEKAT</small>
+              <h3>Wedding Mendatang</h3>
+            </div>
+            <button className="linkButton" onClick={() => setTab("Kalender")}>
+              Lihat Kalender
+            </button>
           </div>
-        ) : (
-          <div className="cards">
-            {weddings.map((w) => (
-              <article className="wedding" key={w.id}>
-                <div className="weddingTop">
-                  <div><h3>{w.client}</h3><p>{w.packageName || "Paket Wedding"}</p></div>
-                  <span className="badge">{w.status}</span>
-                </div>
-                <div className="details">
-                  <p><b>Tanggal</b><span>{new Date(w.date + "T00:00:00").toLocaleDateString("id-ID", {day:"numeric",month:"long",year:"numeric"})}</span></p>
-                  <p><b>Lokasi</b><span>{w.location || "-"}</span></p>
-                  <p><b>WhatsApp</b><span>{w.phone || "-"}</span></p>
-                  <p><b>Booking</b><span>{rupiah(w.booking)}</span></p>
-                  <p><b>Dibayar</b><span>{rupiah(w.paid)}</span></p>
-                  <p><b>Sisa</b><span>{rupiah(Math.max(Number(w.booking)-Number(w.paid),0))}</span></p>
-                </div>
-                <button className="danger" onClick={() => removeWedding(w.id)}>Hapus</button>
-              </article>
+
+          <section className="list">
+            {!ready ? (
+              <Empty text="Memuat data..." />
+            ) : upcoming.length === 0 ? (
+              <Empty text="Belum ada wedding. Tekan Tambah Wedding untuk membuat booking pertama." />
+            ) : (
+              upcoming.slice(0, 3).map((item) => (
+                <WeddingRow
+                  key={item.id}
+                  item={item}
+                  onEdit={openEditWedding}
+                  onDelete={deleteWedding}
+                  onPay={openPayment}
+                  onWhatsApp={openWhatsApp}
+                />
+              ))
+            )}
+          </section>
+
+          <section className="quick">
+            <h3>Keuangan Cepat</h3>
+            <div>
+              <button onClick={() => setTab("Keuangan")}>
+                <WalletCards /> Catat Pembayaran
+              </button>
+              <button onClick={() => setTab("Vendor")}>
+                <Store /> Data Vendor
+              </button>
+              <button onClick={() => setTab("Kalender")}>
+                <CalendarDays /> Lihat Kalender
+              </button>
+            </div>
+          </section>
+        </>
+      )}
+
+      {tab === "Wedding" && (
+        <section className="panel">
+          <div className="panelHeader">
+            <div>
+              <small>DATA KLIEN</small>
+              <h2>Wedding</h2>
+              <p>Semua booking dan status pembayaran.</p>
+            </div>
+            <button className="primary compact" onClick={openNewWedding}>
+              <Plus size={17} /> Tambah
+            </button>
+          </div>
+
+          <section className="list">
+            {items.length === 0 ? (
+              <Empty text="Belum ada data wedding." />
+            ) : (
+              [...items]
+                .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+                .map((item) => (
+                  <WeddingRow
+                    key={item.id}
+                    item={item}
+                    onEdit={openEditWedding}
+                    onDelete={deleteWedding}
+                    onPay={openPayment}
+                    onWhatsApp={openWhatsApp}
+                  />
+                ))
+            )}
+          </section>
+        </section>
+      )}
+
+      {tab === "Keuangan" && (
+        <>
+          <section className="panel financeIntro">
+            <small>KEUANGAN</small>
+            <h2>Ringkasan Pembayaran</h2>
+            <p>Nilai otomatis mengikuti data wedding yang tersimpan.</p>
+          </section>
+
+          <section className="stats financeStats">
+            <Card t="Nilai Booking" v={rp(total)} s="Total seluruh booking" />
+            <Card t="Sudah Dibayar" v={rp(paid)} s="Uang yang sudah masuk" />
+            <Card t="Sisa Tagihan" v={rp(remainingTotal)} s="Belum dibayar klien" />
+          </section>
+
+          <div className="sectionHead">
+            <div>
+              <small>TAGIHAN</small>
+              <h3>Belum Lunas</h3>
+            </div>
+            <b>{items.filter((x) => x.paid < x.value).length} klien</b>
+          </div>
+
+          <section className="list">
+            {items.filter((x) => x.paid < x.value).length === 0 ? (
+              <Empty text="Tidak ada tagihan aktif." />
+            ) : (
+              items
+                .filter((x) => x.paid < x.value)
+                .sort((a, b) => b.value - b.paid - (a.value - a.paid))
+                .map((item) => (
+                  <WeddingRow
+                    key={item.id}
+                    item={item}
+                    onEdit={openEditWedding}
+                    onDelete={deleteWedding}
+                    onPay={openPayment}
+                    onWhatsApp={openWhatsApp}
+                  />
+                ))
+            )}
+          </section>
+        </>
+      )}
+
+      {tab === "Kalender" && (
+        <section className="panel calendarPanel">
+          <div className="panelHeader">
+            <div>
+              <small>AGENDA WEDDING</small>
+              <h2>Kalender</h2>
+              <p>Jadwal otomatis masuk dari tanggal wedding yang disimpan.</p>
+            </div>
+            <button className="primary compact" onClick={openNewWedding}>
+              <Plus size={17} /> Wedding
+            </button>
+          </div>
+
+          <div className="calendarControls">
+            <button className="monthButton" onClick={prevMonth}>
+              <ChevronLeft size={20} />
+            </button>
+            <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+              {monthNames.map((name, index) => (
+                <option value={index} key={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+              {yearOptions.map((value) => (
+                <option value={value} key={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <button className="monthButton" onClick={nextMonth}>
+              <ChevronRight size={20} />
+            </button>
+          </div>
+
+          <div className="dayNames">
+            {dayNames.map((name) => (
+              <div key={name}>{name}</div>
             ))}
           </div>
-        )}
-      </section>
 
-      <nav className="bottom">
-        <button className="active">⌂<span>Dashboard</span></button>
-        <button>♡<span>Wedding</span></button>
-        <button>▣<span>Keuangan</span></button>
-        <button>□<span>Kalender</span></button>
-        <button>◇<span>Vendor</span></button>
+          <div className="calendarGrid">
+            {calendarDays.map((day, index) => {
+              const events = day ? eventsByDay[day] || [] : [];
+              const isToday =
+                day === today.getDate() &&
+                month === today.getMonth() &&
+                year === today.getFullYear();
+
+              return (
+                <div
+                  key={`${day || "blank"}-${index}`}
+                  className={`calendarCell ${!day ? "blank" : ""} ${isToday ? "today" : ""}`}
+                >
+                  {day && (
+                    <>
+                      <b className="dayNumber">{day}</b>
+                      <div className="calendarEvents">
+                        {events.slice(0, 2).map((event) => (
+                          <button
+                            key={event.id}
+                            className="calendarEvent"
+                            onClick={() => {
+                              setTab("Wedding");
+                              openEditWedding(event);
+                            }}
+                          >
+                            {event.couple}
+                          </button>
+                        ))}
+                        {events.length > 2 && (
+                          <span className="moreEvent">+{events.length - 2} lagi</span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="sectionHead inside">
+            <div>
+              <small>JADWAL BULAN INI</small>
+              <h3>
+                {monthNames[month]} {year}
+              </h3>
+            </div>
+          </div>
+
+          <section className="list">
+            {Object.values(eventsByDay).flat().length === 0 ? (
+              <Empty text="Tidak ada wedding di bulan ini." />
+            ) : (
+              Object.values(eventsByDay)
+                .flat()
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .map((item) => (
+                  <WeddingRow
+                    key={item.id}
+                    item={item}
+                    onEdit={openEditWedding}
+                    onDelete={deleteWedding}
+                    onPay={openPayment}
+                    onWhatsApp={openWhatsApp}
+                  />
+                ))
+            )}
+          </section>
+        </section>
+      )}
+
+      {tab === "Vendor" && (
+        <section className="panel">
+          <div className="panelHeader">
+            <div>
+              <small>PARTNER</small>
+              <h2>Vendor</h2>
+              <p>Simpan kontak vendor agar mudah dicari saat persiapan acara.</p>
+            </div>
+            <button className="primary compact" onClick={openNewVendor}>
+              <Plus size={17} /> Vendor
+            </button>
+          </div>
+
+          <div className="vendorGrid">
+            {vendors.length === 0 ? (
+              <Empty text="Belum ada vendor. Tambahkan vendor pertama Anda." />
+            ) : (
+              vendors.map((vendor) => (
+                <article className="vendorCard" key={vendor.id}>
+                  <div className="vendorIcon">
+                    <Store size={22} />
+                  </div>
+                  <div className="vendorGrow">
+                    <small>{vendor.category}</small>
+                    <h3>{vendor.name}</h3>
+                    {vendor.whatsapp && <p>{vendor.whatsapp}</p>}
+                    {vendor.notes && <span>{vendor.notes}</span>}
+                  </div>
+                  <div className="vendorActions">
+                    {vendor.whatsapp && (
+                      <button onClick={() => openWhatsApp(vendor.whatsapp)}>
+                        <MessageCircle size={16} />
+                      </button>
+                    )}
+                    <button onClick={() => openEditVendor(vendor)}>
+                      <Pencil size={16} />
+                    </button>
+                    <button className="danger" onClick={() => deleteVendor(vendor.id)}>
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+      )}
+
+      <nav>
+        {[
+          ["Home", Home],
+          ["Wedding", HeartHandshake],
+          ["Keuangan", WalletCards],
+          ["Kalender", CalendarDays],
+          ["Vendor", Store],
+        ].map(([name, Icon]) => (
+          <button
+            key={name}
+            className={tab === name ? "active" : ""}
+            onClick={() => setTab(name)}
+          >
+            <Icon size={20} />
+            <span>{name}</span>
+          </button>
+        ))}
       </nav>
 
-      {showForm && (
-        <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && setShowForm(false)}>
-          <form className="modal" onSubmit={saveWedding}>
-            <div className="modalHead">
-              <div><h2>Tambah Wedding</h2><p>Masukkan data booking baru.</p></div>
-              <button type="button" className="close" onClick={() => setShowForm(false)}>×</button>
-            </div>
+      {weddingOpen && (
+        <div className="modal" onMouseDown={(e) => e.target === e.currentTarget && setWeddingOpen(false)}>
+          <form onSubmit={saveWedding}>
+            <button type="button" className="close" onClick={() => setWeddingOpen(false)}>
+              <X />
+            </button>
+            <small>{weddingForm.id ? "EDIT BOOKING" : "BOOKING BARU"}</small>
+            <h3>{weddingForm.id ? "Edit Wedding" : "Tambah Wedding"}</h3>
 
-            <label>Nama Pengantin<input required value={form.client} onChange={(e)=>setForm({...form,client:e.target.value})} placeholder="Contoh: Rina & Andi" /></label>
-            <label>Tanggal Wedding<input required type="date" value={form.date} onChange={(e)=>setForm({...form,date:e.target.value})} /></label>
-            <label>Lokasi<input value={form.location} onChange={(e)=>setForm({...form,location:e.target.value})} placeholder="Gedung / alamat" /></label>
-            <label>Nilai Booking<input required type="number" min="0" value={form.booking} onChange={(e)=>setForm({...form,booking:e.target.value})} placeholder="15000000" /></label>
-            <label>DP / Sudah Dibayar<input type="number" min="0" value={form.paid} onChange={(e)=>setForm({...form,paid:e.target.value})} placeholder="5000000" /></label>
-            <label>Sisa Pembayaran<input readOnly value={rupiah(Math.max(Number(form.booking || 0) - Number(form.paid || 0), 0))} /></label>
-            <label>Nomor WhatsApp<input type="tel" value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="08xxxxxxxxxx" /></label>
-            <label>Catatan<textarea rows="3" value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})} placeholder="Catatan kebutuhan klien / wedding" /></label>
-            <div className="formActions">
-              <button type="button" className="secondary" onClick={() => setShowForm(false)}>Batal</button>
-              <button className="primary" type="submit">Simpan Wedding</button>
-            </div>
+            <label>
+              1. Nama Pengantin
+              <input
+                value={weddingForm.couple}
+                onChange={(e) => setWeddingForm({ ...weddingForm, couple: e.target.value })}
+                placeholder="Contoh: Rina & Andi"
+              />
+            </label>
+
+            <label>
+              2. Tanggal Wedding
+              <input
+                type="date"
+                value={weddingForm.date}
+                onChange={(e) => setWeddingForm({ ...weddingForm, date: e.target.value })}
+              />
+              <em>Anda bisa memilih tanggal, bulan, dan tahun. Jadwal otomatis masuk Kalender.</em>
+            </label>
+
+            <label>
+              3. Lokasi
+              <input
+                value={weddingForm.place}
+                onChange={(e) => setWeddingForm({ ...weddingForm, place: e.target.value })}
+                placeholder="Gedung / alamat acara"
+              />
+            </label>
+
+            <label>
+              4. Nilai Booking
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={weddingForm.value}
+                onChange={(e) => setWeddingForm({ ...weddingForm, value: e.target.value })}
+                placeholder="Contoh: 15000000"
+              />
+            </label>
+
+            <label>
+              5. DP / Sudah Dibayar
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={weddingForm.paid}
+                onChange={(e) => setWeddingForm({ ...weddingForm, paid: e.target.value })}
+                placeholder="Contoh: 5000000"
+              />
+            </label>
+
+            <label>
+              6. Sisa Pembayaran Otomatis
+              <div className="readonlyInput">{rp(weddingRemaining)}</div>
+            </label>
+
+            <label>
+              7. Nomor WhatsApp
+              <input
+                value={weddingForm.whatsapp}
+                onChange={(e) => setWeddingForm({ ...weddingForm, whatsapp: e.target.value })}
+                placeholder="Contoh: 081234567890"
+                inputMode="tel"
+              />
+            </label>
+
+            <label>
+              8. Catatan
+              <textarea
+                value={weddingForm.notes}
+                onChange={(e) => setWeddingForm({ ...weddingForm, notes: e.target.value })}
+                placeholder="Paket, request klien, jam akad, vendor, dll."
+                rows={4}
+              />
+            </label>
+
+            <button className="primary full" type="submit">
+              <CheckCircle2 size={18} /> 9. Simpan Wedding
+            </button>
           </form>
         </div>
       )}
 
-      <style jsx>{`
-        :global(*){box-sizing:border-box} :global(body){margin:0;background:#f6f8fb;color:#13233a;font-family:Arial,Helvetica,sans-serif}
-        .shell{min-height:100vh;padding:38px 6% 110px}.hero{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:28px}
-        h1{font-size:38px;margin:0 0 7px}h2,h3,p{margin-top:0}.hero p,.panelHead p,.modalHead p{color:#6d7b8e}
-        button{font:inherit;cursor:pointer}.primary{border:0;background:#112e54;color:white;padding:14px 20px;border-radius:9px;font-weight:700}.small{padding:11px 16px}
-        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:26px}.stats article,.panel,.wedding{background:white;border:1px solid #e3e8ef;border-radius:11px}
-        .stats article{padding:22px}.stats span{display:block;color:#66768a;font-size:14px;margin-bottom:14px}.stats strong{font-size:23px}
-        .panel{padding:25px;min-height:430px}.panelHead{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #edf0f4;padding-bottom:18px}
-        .empty{text-align:center;padding:70px 20px}.empty .icon{font-size:45px;color:#8090a5}.empty p{color:#748296}
-        .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;padding-top:20px}.wedding{padding:20px}.weddingTop{display:flex;justify-content:space-between}.weddingTop p{color:#77869a}
-        .badge{height:max-content;background:#edf4ff;color:#174f8d;border-radius:20px;padding:6px 10px;font-size:12px;font-weight:700}
-        .details{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}.details p{display:flex;justify-content:space-between;border-bottom:1px solid #eef1f5;padding-bottom:8px;font-size:13px}.details span{color:#627287;text-align:right}
-        .danger{border:0;background:#fff0f0;color:#b42318;border-radius:7px;padding:8px 12px}.bottom{position:fixed;left:0;right:0;bottom:0;background:white;border-top:1px solid #dfe5ec;display:flex;justify-content:space-around;padding:10px 5%;z-index:5}
-        .bottom button{background:none;border:0;color:#64748b;display:flex;flex-direction:column;align-items:center;gap:4px}.bottom button.active{color:#0e315a;font-weight:700}.bottom span{font-size:12px}
-        .overlay{position:fixed;inset:0;background:rgba(9,25,44,.48);display:flex;align-items:center;justify-content:center;padding:18px;z-index:20}.modal{background:white;width:min(650px,100%);max-height:92vh;overflow:auto;border-radius:14px;padding:24px;box-shadow:0 25px 70px rgba(0,0,0,.2)}
-        .modalHead{display:flex;justify-content:space-between;gap:15px}.close{border:0;background:#eef2f6;border-radius:50%;width:36px;height:36px;font-size:25px}.modal label{display:block;font-size:13px;font-weight:700;margin:13px 0}
-        input,select{width:100%;margin-top:7px;border:1px solid #cfd8e3;border-radius:8px;padding:12px;background:white;font-size:16px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.formActions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.secondary{border:1px solid #cbd5e1;background:white;padding:12px 18px;border-radius:9px}
-        @media(max-width:760px){.shell{padding:24px 16px 105px}.hero{align-items:flex-start}.hero h1{font-size:27px}.hero>button{display:none}.stats{grid-template-columns:1fr 1fr;gap:10px}.stats article{padding:16px}.stats strong{font-size:17px}.panel{padding:17px}.panelHead p{display:none}.cards{grid-template-columns:1fr}.details{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.bottom{padding-left:0;padding-right:0}}
-      `}</style>
+      {paymentOpen && currentPaymentWedding && (
+        <div className="modal" onMouseDown={(e) => e.target === e.currentTarget && setPaymentOpen(false)}>
+          <form onSubmit={savePayment} className="smallForm">
+            <button type="button" className="close" onClick={() => setPaymentOpen(false)}>
+              <X />
+            </button>
+            <small>PEMBAYARAN</small>
+            <h3>Catat Pembayaran</h3>
+            <p className="muted">
+              {currentPaymentWedding.couple} · Sisa {rp(currentPaymentWedding.value - currentPaymentWedding.paid)}
+            </p>
+            <label>
+              Nominal Masuk
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="Contoh: 2000000"
+              />
+            </label>
+            <button className="primary full" type="submit">
+              <Banknote size={18} /> Simpan Pembayaran
+            </button>
+          </form>
+        </div>
+      )}
+
+      {vendorOpen && (
+        <div className="modal" onMouseDown={(e) => e.target === e.currentTarget && setVendorOpen(false)}>
+          <form onSubmit={saveVendor} className="smallForm">
+            <button type="button" className="close" onClick={() => setVendorOpen(false)}>
+              <X />
+            </button>
+            <small>{vendorForm.id ? "EDIT VENDOR" : "VENDOR BARU"}</small>
+            <h3>{vendorForm.id ? "Edit Vendor" : "Tambah Vendor"}</h3>
+            <label>
+              Nama Vendor
+              <input
+                value={vendorForm.name}
+                onChange={(e) => setVendorForm({ ...vendorForm, name: e.target.value })}
+                placeholder="Contoh: Dekor Cantik Jepara"
+              />
+            </label>
+            <label>
+              Kategori
+              <input
+                value={vendorForm.category}
+                onChange={(e) => setVendorForm({ ...vendorForm, category: e.target.value })}
+                placeholder="Dekorasi / Catering / Foto / Gedung"
+              />
+            </label>
+            <label>
+              Nomor WhatsApp
+              <input
+                value={vendorForm.whatsapp}
+                onChange={(e) => setVendorForm({ ...vendorForm, whatsapp: e.target.value })}
+                placeholder="081234567890"
+                inputMode="tel"
+              />
+            </label>
+            <label>
+              Catatan
+              <textarea
+                value={vendorForm.notes}
+                onChange={(e) => setVendorForm({ ...vendorForm, notes: e.target.value })}
+                rows={3}
+                placeholder="Harga, PIC, paket, catatan kerja sama, dll."
+              />
+            </label>
+            <button className="primary full" type="submit">
+              <CheckCircle2 size={18} /> Simpan Vendor
+            </button>
+          </form>
+        </div>
+      )}
     </main>
+  );
+}
+
+function Card({ t, v, s }) {
+  return (
+    <div className="card">
+      <small>{t}</small>
+      <strong>{v}</strong>
+      <span>{s}</span>
+    </div>
+  );
+}
+
+function Empty({ text }) {
+  return <div className="emptyState">{text}</div>;
+}
+
+function WeddingRow({ item, onEdit, onDelete, onPay, onWhatsApp }) {
+  const remaining = Math.max(Number(item.value || 0) - Number(item.paid || 0), 0);
+  const percent = item.value ? Math.min(100, (item.paid / item.value) * 100) : 0;
+
+  return (
+    <article>
+      <div className="datebox">
+        <HeartHandshake size={22} />
+      </div>
+      <div className="grow">
+        <div className="titleLine">
+          <h4>{item.couple}</h4>
+          {remaining === 0 && <span className="paidBadge">Lunas</span>}
+        </div>
+        <p>
+          {formatDate(item.date)} · {item.place}
+        </p>
+        <div className="bar">
+          <i style={{ width: `${percent}%` }} />
+        </div>
+        {item.notes && <em className="noteLine">{item.notes}</em>}
+        <div className="rowActions">
+          {remaining > 0 && (
+            <button onClick={() => onPay(item)}>
+              <Banknote size={14} /> Bayar
+            </button>
+          )}
+          {item.whatsapp && (
+            <button onClick={() => onWhatsApp(item.whatsapp)}>
+              <MessageCircle size={14} /> WhatsApp
+            </button>
+          )}
+          <button onClick={() => onEdit(item)}>
+            <Pencil size={14} /> Edit
+          </button>
+          <button className="danger" onClick={() => onDelete(item.id)}>
+            <Trash2 size={14} /> Hapus
+          </button>
+        </div>
+      </div>
+      <div className="money">
+        <b>{rp(item.value)}</b>
+        <span>{remaining === 0 ? "Lunas" : `Sisa ${rp(remaining)}`}</span>
+      </div>
+    </article>
   );
 }
