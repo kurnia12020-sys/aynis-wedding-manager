@@ -52,7 +52,7 @@ const emptyWedding = {
   addOns: [],
 };
 
-const emptyAddOn = { id: null, name: "", qty: "1", price: "", notes: "", paid: false };
+const emptyAddOn = { id: null, name: "", qty: "1", price: "", notes: "" };
 
 const emptyPackage = { id: null, name: "", price: "", notes: "", active: true };
 
@@ -1167,7 +1167,6 @@ export default function Page() {
       qty: String(item.qty || 1),
       price: String(item.price || ""),
       notes: item.notes || "",
-      paid: Boolean(item.paid),
     });
     setAddOnOpen(true);
   }
@@ -1185,7 +1184,6 @@ export default function Page() {
       qty,
       price,
       notes: addOnForm.notes.trim(),
-      paid: Boolean(addOnForm.paid),
     };
     setWeddings((current) => current.map((w) => {
       if (String(w.id) !== String(addOnWeddingId)) return w;
@@ -1672,7 +1670,6 @@ export default function Page() {
               <Field label="Harga per Item"><input type="text" inputMode="numeric" value={formatMoneyInput(addOnForm.price)} onChange={(e)=>setAddOnForm({...addOnForm,price:onlyDigits(e.target.value)})} placeholder="500.000"/>{addOnForm.price&&<em>{rp(addOnForm.price)}</em>}</Field>
             </div>
             <Field label="Catatan"><textarea rows={3} value={addOnForm.notes} onChange={(e)=>setAddOnForm({...addOnForm,notes:e.target.value})} placeholder="Keterangan tambahan untuk klien"/></Field>
-            <label className="checkLine"><input type="checkbox" checked={addOnForm.paid} onChange={(e)=>setAddOnForm({...addOnForm,paid:e.target.checked})}/><span>Sudah dibayar klien <small>(status saja — uang masuk tetap dicatat di Riwayat Pembayaran)</small></span></label>
             <div className="editPaymentHint"><small>TOTAL ADD-ON</small><b>{rp(Math.max(Number(addOnForm.qty||1),1)*Number(addOnForm.price||0))}</b><span>Biaya modal tidak dicatat di sini. Masukkan biaya melalui Vendor/Pengeluaran.</span></div>
             <button className="primary full" type="submit"><CheckCircle2 size={18}/> Simpan Add-on</button>
           </form>
@@ -1800,7 +1797,7 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
 
     <section className="panel addonPanel">
       <div className="panelHeader compactHeader"><div><small>4 · ADD-ON DI LUAR PAKET</small><h2>Add-on Klien</h2><p>Tambahan layanan/barang di luar paket utama. Biaya modal tetap dicatat melalui Vendor/Pengeluaran.</p></div>{!readOnly&&<button className="primary compact" onClick={onAddAddOn}><Plus size={16}/> Tambah Add-on</button>}</div>
-      {(wedding.addOns||[]).length===0?<Empty text="Belum ada Add-on di luar paket."/>:<div className="addonList">{(wedding.addOns||[]).map((item)=>{const total=Math.max(Number(item.qty||1),1)*Number(item.price||0);return <div className="addonCard" key={item.id}><div className="addonMain"><small>ADD-ON · {item.qty||1}×</small><b>{item.name}</b>{item.notes&&<span>{item.notes}</span>}<em className={item.paid?"addonPaid":""}>{item.paid?"Sudah dibayar":"Belum dibayar"}</em></div><div className="addonPrice"><small>Harga Klien</small><b>{rp(total)}</b>{Number(item.qty||1)>1&&<span>{rp(item.price)} / item</span>}</div>{!readOnly&&<div className="iconActions"><button onClick={()=>onEditAddOn(item)}><Pencil size={15}/></button><button className="danger" onClick={()=>onDeleteAddOn(item.id)}><Trash2 size={15}/></button></div>}</div>})}</div>}
+      {(wedding.addOns||[]).length===0?<Empty text="Belum ada Add-on di luar paket."/>:<div className="addonList">{(wedding.addOns||[]).map((item)=>{const total=Math.max(Number(item.qty||1),1)*Number(item.price||0);return <div className="addonCard" key={item.id}><div className="addonMain"><small>ADD-ON · {item.qty||1}×</small><b>{item.name}</b>{item.notes&&<span>{item.notes}</span>}</div><div className="addonPrice"><small>Harga Klien</small><b>{rp(total)}</b>{Number(item.qty||1)>1&&<span>{rp(item.price)} / item</span>}</div>{!readOnly&&<div className="iconActions"><button onClick={()=>onEditAddOn(item)}><Pencil size={15}/></button><button className="danger" onClick={()=>onDeleteAddOn(item.id)}><Trash2 size={15}/></button></div>}</div>})}</div>}
       <div className="addonTotalBar"><span>Total Add-on</span><b>{rp(f.addOns)}</b></div>
     </section>
 
