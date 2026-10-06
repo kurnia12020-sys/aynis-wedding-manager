@@ -33,6 +33,9 @@ import {
   Printer,
   Bell,
   ArrowUp,
+  ImagePlus,
+  Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 
 import { supabase, supabaseConfigured } from "../lib/cloud";
@@ -129,6 +132,87 @@ const formatFullWeddingDate = (date) => {
     year: "numeric",
   });
 };
+
+
+const OCR_MONTHS = {
+  januari: 1, january: 1, februari: 2, february: 2, maret: 3, march: 3,
+  april: 4, mei: 5, may: 5, juni: 6, june: 6, juli: 7, july: 7,
+  agustus: 8, august: 8, september: 9, oktober: 10, october: 10,
+  november: 11, desember: 12, december: 12,
+};
+
+function cleanOcrLine(value) {
+  return String(value || "").replace(/[|]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeOcrDate(text) {
+  const source = String(text || "");
+  const keywordDate = source.match(/(?:tanggal|tgl|wedding|nikah|akad|resepsi)[^\n\r]{0,30}?(\d{1,2})[\s.\/-]+([A-Za-z]+|\d{1,2})[\s.\/-]+(20\d{2}|\d{2})/i);
+  const genericDate = source.match(/\b(\d{1,2})[\s.\/-]+([A-Za-z]+|\d{1,2})[\s.\/-]+(20\d{2}|\d{2})\b/i);
+  const match = keywordDate || genericDate;
+  if (!match) return "";
+  const day = Number(match[1]);
+  let month = 0;
+  if (/^\d+$/.test(match[2])) month = Number(match[2]);
+  else month = OCR_MONTHS[match[2].toLowerCase()] || 0;
+  let year = Number(match[3]);
+  if (year < 100) year += 2000;
+  if (!day || !month || day > 31 || month > 12 || year < 2020 || year > 2100) return "";
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return "";
+  return `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+}
+
+function lineValue(lines, keywords) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const lower = line.toLowerCase();
+    const keyword = keywords.find((key) => lower.includes(key));
+    if (!keyword) continue;
+    let value = line.replace(new RegExp(`^.*?${keyword}\\s*[:=\\-]?\\s*`, "i"), "").trim();
+    if (!value || value.toLowerCase() === keyword) value = lines[i + 1] || "";
+    if (value) return value;
+  }
+  return "";
+}
+
+function extractWeddingFromOcr(rawText, packages = []) {
+  const text = String(rawText || "").replace(/\r/g, "");
+  const lines = text.split("\n").map(cleanOcrLine).filter(Boolean);
+  const joined = lines.join("\n");
+
+  let couple = lineValue(lines, ["nama pengantin", "nama mempelai", "pengantin", "mempelai", "atas nama", "nama"]);
+  couple = couple.replace(/^[:=\-\s]+/, "").slice(0, 100);
+
+  const phoneMatches = joined.match(/(?:\+?62|0)8[1-9][0-9\s.\-]{7,15}/g) || [];
+  const whatsapp = phoneMatches.length ? phoneMatches[0].replace(/[^0-9+]/g, "") : "";
+
+  const date = normalizeOcrDate(joined);
+
+  let place = lineValue(lines, ["lokasi", "tempat", "venue", "alamat acara", "alamat"]);
+  place = place.replace(/^[:=\-\s]+/, "").slice(0, 180);
+
+  let packageName = "";
+  const joinedLower = joined.toLowerCase();
+  const matchedPackage = packages.find((pkg) => pkg?.active !== false && pkg?.name && joinedLower.includes(String(pkg.name).toLowerCase()));
+  if (matchedPackage) packageName = matchedPackage.name;
+  if (!packageName) packageName = lineValue(lines, ["nama paket", "paket wedding", "paket"]);
+  packageName = packageName.replace(/^[:=\-\s]+/, "").replace(/\b(?:rp\.?\s*)?[\d.,]+.*$/i, "").trim().slice(0, 100);
+
+  let dealPrice = "";
+  const moneyKeyword = joined.match(/(?:harga\s*deal|total\s*(?:deal|harga)?|deal|harga\s*paket)[^\n\r]{0,35}?(?:rp\.?\s*)?([0-9][0-9.,]{4,})/i);
+  if (moneyKeyword) dealPrice = onlyDigits(moneyKeyword[1]);
+  if (!dealPrice && matchedPackage?.price) dealPrice = String(matchedPackage.price);
+
+  let notes = lineValue(lines, ["catatan", "request", "keterangan", "note"]);
+  notes = notes.replace(/^[:=\-\s]+/, "").slice(0, 500);
+
+  const confidence = {
+    couple: Boolean(couple), whatsapp: Boolean(whatsapp), date: Boolean(date), place: Boolean(place),
+    packageName: Boolean(packageName), dealPrice: Boolean(dealPrice), notes: Boolean(notes),
+  };
+  return { couple, whatsapp, date, place, packageName, dealPrice, notes, confidence, rawText: joined };
+}
 
 const monthNames = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -431,6 +515,12 @@ export default function Page() {
 
   const [weddingOpen, setWeddingOpen] = useState(false);
   const [weddingForm, setWeddingForm] = useState(emptyWedding);
+  const [waImportMode, setWaImportMode] = useState(false);
+  const [waImportFiles, setWaImportFiles] = useState([]);
+  const [waImportPreviews, setWaImportPreviews] = useState([]);
+  const [waImportBusy, setWaImportBusy] = useState(false);
+  const [waImportProgress, setWaImportProgress] = useState("");
+  const [waImportResult, setWaImportResult] = useState(null);
 
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentWeddingId, setPaymentWeddingId] = useState(null);
@@ -852,12 +942,25 @@ export default function Page() {
 
   const yearOptions = Array.from({ length: 21 }, (_, i) => today.getFullYear() - 5 + i);
 
+  function resetWaImport() {
+    waImportPreviews.forEach((url) => { try { URL.revokeObjectURL(url); } catch {} });
+    setWaImportFiles([]);
+    setWaImportPreviews([]);
+    setWaImportBusy(false);
+    setWaImportProgress("");
+    setWaImportResult(null);
+  }
+
   function openNewWedding() {
+    resetWaImport();
+    setWaImportMode(false);
     setWeddingForm(emptyWedding);
     setWeddingOpen(true);
   }
 
   function openEditWedding(wedding) {
+    resetWaImport();
+    setWaImportMode(false);
     setWeddingForm({
       id: wedding.id,
       couple: wedding.couple || "",
@@ -879,6 +982,58 @@ export default function Page() {
       addOns: (wedding.addOns || []).map((item) => ({ ...item })),
     });
     setWeddingOpen(true);
+  }
+
+  function onWaScreenshotSelect(event) {
+    const selected = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/")).slice(0, 5);
+    waImportPreviews.forEach((url) => { try { URL.revokeObjectURL(url); } catch {} });
+    setWaImportFiles(selected);
+    setWaImportPreviews(selected.map((file) => URL.createObjectURL(file)));
+    setWaImportResult(null);
+    setWaImportProgress(selected.length ? `${selected.length} screenshot siap dibaca.` : "");
+  }
+
+  async function readWhatsAppScreenshots() {
+    if (!waImportFiles.length) return alert("Pilih screenshot chat WhatsApp terlebih dahulu.");
+    setWaImportBusy(true);
+    setWaImportResult(null);
+    try {
+      const { createWorker } = await import("tesseract.js");
+      setWaImportProgress("Menyiapkan pembaca screenshot…");
+      const worker = await createWorker("ind+eng", 1, {
+        logger: (message) => {
+          if (message?.status === "recognizing text" && typeof message.progress === "number") {
+            setWaImportProgress(`Membaca screenshot… ${Math.round(message.progress * 100)}%`);
+          }
+        },
+      });
+      const extracted = [];
+      for (let i = 0; i < waImportFiles.length; i += 1) {
+        setWaImportProgress(`Membaca screenshot ${i + 1} dari ${waImportFiles.length}…`);
+        const result = await worker.recognize(waImportFiles[i]);
+        extracted.push(result?.data?.text || "");
+      }
+      await worker.terminate();
+      const parsed = extractWeddingFromOcr(extracted.join("\n"), packages);
+      const foundCount = Object.values(parsed.confidence).filter(Boolean).length;
+      setWeddingForm((current) => ({
+        ...current,
+        couple: parsed.couple || current.couple,
+        whatsapp: parsed.whatsapp || current.whatsapp,
+        date: parsed.date || current.date,
+        place: parsed.place || current.place,
+        packageName: parsed.packageName || current.packageName,
+        dealPrice: parsed.dealPrice || current.dealPrice,
+        notes: parsed.notes || current.notes,
+      }));
+      setWaImportResult(parsed);
+      setWaImportProgress(foundCount ? `${foundCount} bagian data terdeteksi. Periksa kembali sebelum simpan.` : "Teks terbaca, tetapi data wedding belum dapat dikenali dengan yakin. Isi atau koreksi form secara manual.");
+    } catch (error) {
+      console.error("WA screenshot import failed", error);
+      setWaImportProgress("Screenshot belum berhasil dibaca. Anda tetap bisa mengisi form secara manual atau coba screenshot yang lebih jelas.");
+    } finally {
+      setWaImportBusy(false);
+    }
   }
 
   async function saveWedding(event) {
@@ -1818,6 +1973,35 @@ export default function Page() {
               <h3>{weddingForm.id?"Edit Data Wedding":"Tambah Wedding"}</h3>
               <p>Isi berurutan: data pengantin, paket, lalu isi paket/vendor.</p>
             </div>
+
+            {!weddingForm.id && <section className="waImportCard">
+              <div className="waImportHead">
+                <div className="waImportIcon"><MessageCircle size={20}/></div>
+                <div><small>INPUT CEPAT</small><b>Import dari Screenshot WhatsApp</b><span>Upload chat klien, baca otomatis, lalu koreksi hasilnya sebelum Simpan Wedding.</span></div>
+                <button type="button" className={`waImportToggle ${waImportMode?"active":""}`} onClick={()=>setWaImportMode((value)=>!value)}>{waImportMode?"Tutup":"Coba"}</button>
+              </div>
+              {waImportMode && <div className="waImportBody">
+                <label className="waUploadZone">
+                  <ImagePlus size={25}/>
+                  <b>Pilih Screenshot Chat WA</b>
+                  <span>Bisa pilih sampai 5 gambar. Gunakan screenshot yang tulisannya jelas.</span>
+                  <input type="file" accept="image/*" multiple onChange={onWaScreenshotSelect}/>
+                </label>
+                {waImportPreviews.length>0 && <div className="waPreviewStrip">{waImportPreviews.map((src,index)=><div className="waPreviewThumb" key={src}><img src={src} alt={`Screenshot WA ${index+1}`}/><span>{index+1}</span></div>)}</div>}
+                <button type="button" className="waReadButton" onClick={readWhatsAppScreenshots} disabled={waImportBusy||!waImportFiles.length}><Sparkles size={17}/>{waImportBusy?" Sedang Membaca…":" Baca & Isi Form Otomatis"}</button>
+                {waImportProgress&&<div className={`waImportNotice ${waImportResult?"success":""}`}><AlertTriangle size={16}/><span>{waImportProgress}</span></div>}
+                {waImportResult&&<div className="waImportChecklist">
+                  <b>Hasil baca — tetap bisa diedit</b>
+                  <div className="waCheckGrid">
+                    {[
+                      ["Nama",waImportResult.confidence.couple],["WhatsApp",waImportResult.confidence.whatsapp],["Tanggal",waImportResult.confidence.date],
+                      ["Lokasi",waImportResult.confidence.place],["Paket",waImportResult.confidence.packageName],["Harga",waImportResult.confidence.dealPrice]
+                    ].map(([label,ok])=><span className={ok?"ok":"check"} key={label}>{ok?"✓":"!"} {label}</span>)}
+                  </div>
+                  <p>Kolom bertanda <b>!</b> perlu dicek atau diisi manual. Data belum tersimpan sampai tombol <b>Simpan Wedding</b> ditekan.</p>
+                </div>}
+              </div>}
+            </section>}
 
             <section className="formSection">
               <div className="formSectionTitle"><span>1</span><div><small>DATA PENGANTIN</small><b>Info Lengkap Pengantin</b></div></div>

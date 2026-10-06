@@ -100,3 +100,11 @@ V4.23 - PWA / Add to Home Screen
 - Logo now appears in the Invoice/Kwitansi preview modal.
 - Logo now appears in printed / Save as PDF Invoice and Kwitansi documents.
 - Based on V4.33, preserving Scroll To Top and prior features.
+
+
+## V4.35 — Import Klien dari Screenshot WhatsApp
+- Tambah Wedding memiliki import screenshot WhatsApp.
+- OCR berjalan di browser dengan Tesseract.js.
+- Hasil mencoba mengisi nama, WhatsApp, tanggal, lokasi, paket, harga deal, dan catatan.
+- Semua hasil tetap editable dan tidak disimpan sebelum tombol Simpan Wedding ditekan.
+- Mendukung sampai 5 screenshot per import.
