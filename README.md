@@ -1,3 +1,11 @@
+# AYNIS Wedding Manager V4.29 — Vendor Wedding Date
+
+Perubahan:
+- Bagian **VENDOR TERKAIT** sekarang menampilkan hari, tanggal, bulan, dan tahun wedding.
+- Format contoh: **Selasa, 6 Oktober 2026**.
+- Tanggal ditampilkan langsung di bawah judul **Semua Vendor Wedding**.
+- Daftar semua vendor, kategori, nomor WhatsApp, tombol Hubungi, dan seluruh fitur V4.28 tetap dipertahankan.
+
 # AYNIS Wedding Manager V4.28 — Client Notes in Main Summary
 
 Perubahan dari V4.27:
@@ -63,3 +71,10 @@ V4.23 - PWA / Add to Home Screen
 - Semua vendor terkait ditampilkan tanpa dipotong.
 - Nomor WhatsApp vendor diambil dari Master Vendor dan tombol Hubungi membuka WhatsApp langsung.
 - Menu detail lama tetap dipertahankan, dengan tombol akses cepat agar navigasi lebih praktis di HP.
+
+
+## V4.30 — Clean Vendor Wedding Info
+- Vendor Terkait menampilkan nama pengantin, hari/tanggal lengkap, dan lokasi acara.
+- Nomor WhatsApp vendor tidak ditampilkan di layar.
+- Kontak vendor tetap tersedia melalui tombol Hubungi WhatsApp.
+- Status vendor dan nominal vendor tidak ditampilkan pada bagian ini.

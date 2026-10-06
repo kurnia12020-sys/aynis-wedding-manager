@@ -119,6 +119,16 @@ const formatDate = (date) => {
   });
 };
 
+const formatFullWeddingDate = (date) => {
+  if (!date) return "Tanggal wedding belum diisi";
+  return new Date(`${date}T00:00:00`).toLocaleDateString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+
 const monthNames = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
@@ -2155,8 +2165,8 @@ function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=fal
     </section>
 
     <section className="panel vendorContactPanel" id="client-vendors">
-      <div className="summaryTitleRow"><div><small>VENDOR TERKAIT</small><h2>Semua Vendor Wedding</h2><p>Nomor WhatsApp ditarik dari Master Vendor.</p></div>{!readOnly&&canViewFinance&&<button className="primary compact" onClick={onAddItem}><Plus size={15}/> Tambah Vendor</button>}</div>
-      {vendorContacts.length===0?<Empty text="Belum ada vendor terkait pada wedding ini."/>:<div className="vendorContactList">{vendorContacts.map((vendor)=><div className="vendorContactRow" key={vendor.id}><div className="vendorContactIcon"><Store size={18}/></div><div className="vendorContactMain"><small>{vendor.category}</small><b>{vendor.name}</b>{vendor.whatsapp&&<span>{vendor.whatsapp}</span>}</div>{vendor.whatsapp?<button className="vendorWaButton" onClick={()=>onVendorWhatsApp?.(vendor.whatsapp)}><MessageCircle size={17}/> Hubungi</button>:<span className="vendorNoWa">WA belum diisi</span>}</div>)}</div>}
+      <div className="summaryTitleRow"><div><small>VENDOR TERKAIT</small><h2>Semua Vendor Wedding</h2><div className="vendorWeddingMeta"><div><Users size={15}/><b>{wedding.couple || "-"}</b></div><div><CalendarDays size={15}/><b>{formatFullWeddingDate(wedding.date)}</b></div><div><MapPin size={15}/><b>{wedding.place || "-"}</b></div></div></div>{!readOnly&&canViewFinance&&<button className="primary compact" onClick={onAddItem}><Plus size={15}/> Tambah Vendor</button>}</div>
+      {vendorContacts.length===0?<Empty text="Belum ada vendor terkait pada wedding ini."/>:<div className="vendorContactList">{vendorContacts.map((vendor)=><div className="vendorContactRow" key={vendor.id}><div className="vendorContactIcon"><Store size={18}/></div><div className="vendorContactMain"><small>{vendor.category}</small><b>{vendor.name}</b></div>{vendor.whatsapp?<button className="vendorWaButton" onClick={()=>onVendorWhatsApp?.(vendor.whatsapp)}><MessageCircle size={17}/> Hubungi WhatsApp</button>:<span className="vendorNoWa">WA belum diisi</span>}</div>)}</div>}
     </section>
 
     <section className="panel quickDetailMenu">
