@@ -32,6 +32,7 @@ import {
   FileText,
   Printer,
   Bell,
+  ArrowUp,
 } from "lucide-react";
 
 import { supabase, supabaseConfigured } from "../lib/cloud";
@@ -1772,6 +1773,17 @@ export default function Page() {
           </section>
         </div>
       )}
+
+      <button
+        type="button"
+        className="scrollTopButton"
+        onClick={()=>window.scrollTo({ top: 0, behavior: "smooth" })}
+        aria-label="Kembali ke atas"
+        title="Kembali ke atas"
+      >
+        <ArrowUp size={20}/>
+        <span>Ke Atas</span>
+      </button>
 
       <nav>
 {[["Home",Home],["Wedding",HeartHandshake],...(canViewFinance?[["Keuangan",WalletCards]]:[]),["Kalender",CalendarDays],["Vendor",Store]].map(([name,Icon])=><button key={name} className={tab===name?"active":""} onClick={()=>{setTab(name);if(name!=="Wedding")setSelectedWeddingId(null);}}><Icon size={20}/><span>{name}</span></button>)}
