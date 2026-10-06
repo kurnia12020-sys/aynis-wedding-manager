@@ -2158,18 +2158,15 @@ function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=fal
     </section>
 
     <section className="panel clientSummaryPanel" id="client-summary">
-      <div className="summaryTitleRow"><div><small>RANGKUMAN KLIEN</small><h2>Informasi Utama</h2></div>{!readOnly&&<button className="softButton compact" onClick={onEdit}><Pencil size={15}/> Ubah</button>}</div>
-      <div className="clientSummaryGrid">
-        <div><small>Nama Pengantin</small><b>{wedding.couple}</b></div>
+      <div className="summaryTitleRow"><div><small>RANGKUMAN KLIEN</small><h2>Pembayaran & Paket</h2><p>Informasi penting tanpa mengulang detail acara di atas.</p></div>{!readOnly&&<button className="softButton compact" onClick={onEdit}><Pencil size={15}/> Ubah</button>}</div>
+      <div className="clientPaymentCards">
         <div><small>Harga Deal</small><b>{rp(f.deal)}</b></div>
-        <div><small>Tanggal Wedding</small><b>{formatDate(wedding.date)}</b><span>{dateHint}</span></div>
-        <div><small>Total Uang Masuk</small><b className="positive">{rp(f.incoming)}</b></div>
-        <div><small>Lokasi</small><b>{wedding.place || "-"}</b></div>
+        <div><small>Uang Masuk</small><b className="positive">{rp(f.incoming)}</b></div>
         <div><small>Sisa Tagihan</small><b className={f.remaining>0?"negative":"positive"}>{rp(f.remaining)}</b></div>
-        <div><small>Paket</small><b>{wedding.packageName || "-"}</b></div>
-        <div className="summaryProgressCell"><small>Progress Pembayaran</small><div className="summaryProgressLine"><div className="bar"><i style={{width:`${paymentProgress}%`}}/></div><b>{paymentProgress}%</b></div><span>{rp(f.incoming)} / {rp(f.netDeal)}</span></div>
-        <div className="summaryNotesCell"><small>Catatan Pengantin / Acara</small><b>{wedding.notes?.trim() || "Belum ada catatan pengantin / acara."}</b></div>
       </div>
+      <div className="clientPackageStrip"><div><Package size={17}/><span><small>Paket Wedding</small><b>{wedding.packageName || "Belum memilih paket"}</b></span></div><span className={`bigStatus ${paymentStatus(wedding)==="Lunas"||paymentStatus(wedding)==="Selesai"?"paid":""}`}>{paymentStatus(wedding)}</span></div>
+      <div className="summaryProgressBox"><div className="summaryProgressHead"><div><small>PROGRESS PEMBAYARAN</small><b>{paymentProgress}%</b></div><span>{rp(f.incoming)} dari {rp(f.netDeal)}</span></div><div className="bar"><i style={{width:`${paymentProgress}%`}}/></div></div>
+      <div className="clientNotesBox"><div className="clientNotesIcon"><FileText size={18}/></div><div><small>CATATAN PENGANTIN / ACARA</small><p>{wedding.notes?.trim() || "Belum ada catatan pengantin / acara."}</p></div></div>
     </section>
 
     <section className="panel paymentSnapshotPanel">

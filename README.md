@@ -86,3 +86,10 @@ V4.23 - PWA / Add to Home Screen
 - Nomor WhatsApp vendor tidak ditampilkan di layar.
 - Kontak vendor tetap tersedia melalui tombol Hubungi WhatsApp.
 - Status vendor dan nominal vendor tidak ditampilkan pada bagian ini.
+
+
+## V4.32 — Client Detail Refresh
+- Merapikan hierarki visual Detail Klien.
+- Header fokus identitas acara, rangkuman fokus pembayaran & paket.
+- Catatan pengantin/acara dibuat menjadi kartu khusus yang lebih mudah dibaca.
+- Tidak mengubah logika data maupun alur fitur V4.31.
