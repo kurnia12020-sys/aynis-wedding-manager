@@ -1665,6 +1665,7 @@ export default function Page() {
           onResetPaymentSchedule={() => resetPaymentSchedule(selectedWedding)}
           onUpdateChecklist={(key,value) => updateWeddingChecklist(selectedWedding.id,key,value)}
           onWhatsApp={() => openWhatsApp(selectedWedding.whatsapp)}
+          onVendorWhatsApp={(number) => openWhatsApp(number)}
           canViewFinance={canViewFinance}
         />
       )}
@@ -1938,19 +1939,21 @@ function ModalClose({ onClick }) { return <button type="button" className="close
 
 function WeddingRow({ wedding, onDetail, onWhatsApp }) {
   const f = financials(wedding);
-  const pct = f.deal ? Math.min(100, (f.incoming / f.deal) * 100) : 0;
-  return <article>
-    <div className="datebox"><HeartHandshake size={22}/></div>
+  const pct = f.netDeal ? Math.min(100, Math.round((f.incoming / f.netDeal) * 100)) : 0;
+  return <article className="clientSummaryRow" onClick={()=>onDetail(wedding)}>
+    <div className="datebox clientAvatar"><HeartHandshake size={22}/></div>
     <div className="grow">
       <div className="titleLine"><h4>{wedding.couple}</h4><span className={`statusBadge ${f.remaining===0?"paid":""}`}>{paymentStatus(wedding)}</span></div>
-      <p>{formatDate(wedding.date)} · {wedding.place} · {wedding.packageName || "Belum ada paket"}</p>
+      <p className="clientMeta">{formatDate(wedding.date)} · {wedding.packageName || "Belum ada paket"}</p>
+      <div className="clientDealLine"><b>{rp(f.netDeal || f.deal)}</b><span>{pct}%</span></div>
       <div className="bar"><i style={{width:`${pct}%`}}/></div>
-      <div className="rowActions">
+      <div className="clientPaidLine"><span>{rp(f.incoming)} / {rp(f.netDeal || f.deal)}</span>{wedding.place&&<span><MapPin size={13}/>{wedding.place}</span>}</div>
+      <div className="rowActions" onClick={(e)=>e.stopPropagation()}>
         <button onClick={()=>onDetail(wedding)}><ReceiptText size={14}/> Detail</button>
         {wedding.whatsapp&&<button onClick={()=>onWhatsApp(wedding.whatsapp)}><MessageCircle size={14}/> WhatsApp</button>}
       </div>
     </div>
-    <div className="money"><b>{rp(f.deal)}</b><span>{f.remaining===0?"Lunas":`Sisa ${rp(f.remaining)}`}</span></div>
+    <ChevronRight size={19} className="clientRowChevron"/>
   </article>;
 }
 
@@ -1972,7 +1975,7 @@ function VendorCard({ vendor, readOnly=false, onWhatsApp, onEdit, onDelete }) {
   </article>;
 }
 
-function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onUpdateChecklist, onWhatsApp }) {
+function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onUpdateChecklist, onWhatsApp, onVendorWhatsApp }) {
   const f = financials(wedding);
   const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
   const scheduledPaid = schedule.reduce((sum, stage) => sum + (stage.paid ? Number(stage.amount || 0) : 0), 0);
@@ -1990,6 +1993,20 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
     const amount = parseMoney(paymentDrafts[stage.key] ?? stage.amount);
     onUpdatePaymentStage(stage.key, { amount });
   }
+  let previewStageTargetBefore = 0;
+  const invoiceStagePreview = schedule.map((stage) => {
+    const planned = Math.max(Number(stage.plannedAmount ?? stage.amount ?? 0), 0);
+    const paidForStage = Math.max(Math.min(Number(f.incoming || 0) - previewStageTargetBefore, planned), 0);
+    previewStageTargetBefore += planned;
+    const fullyPaid = planned === 0 || paidForStage >= planned;
+    const partiallyPaid = paidForStage > 0 && !fullyPaid;
+    const status = fullyPaid ? "Lunas" : partiallyPaid ? "Sebagian" : "Menunggu Pembayaran";
+    const latestManualPaymentDate = (wedding.payments || []).filter((item) => item.date).sort((a,b) => String(a.date).localeCompare(String(b.date))).at(-1)?.date || "";
+    const paidDate = stage.paidDate || (paidForStage > 0 ? latestManualPaymentDate : "");
+    const displayLabel = stage.key === "dp1" ? "DP 1 / Booking Tanggal" : stage.key === "dp2" ? "DP 2 / Target 30%" : stage.key === "dp3" ? "DP 3 / Target 70%" : "Pelunasan";
+    return { ...stage, planned, paidForStage, status, paidDate, displayLabel };
+  });
+
   const receiptPayments = [
     ...schedule.filter((stage) => stage.paid).map((stage) => ({
       id: `stage-${stage.key}`,
@@ -2011,7 +2028,24 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
   const timeline = checklistTimeline(wedding);
   const checklistDone = timeline.filter((item) => item.done).length;
   const checklistProgress = timeline.length ? Math.round((checklistDone / timeline.length) * 100) : 0;
+  const paymentProgress = f.netDeal ? Math.min(100, Math.round((f.incoming / f.netDeal) * 100)) : 0;
+  const vendorContacts = (wedding.packageItems || []).map((item) => {
+    const vendor = vendors.find((v) => String(v.id) === String(item.vendorId));
+    return {
+      id: item.id,
+      name: vendor?.name || item.name || "Vendor",
+      category: vendor?.category || item.category || "Vendor",
+      whatsapp: vendor?.whatsapp || "",
+    };
+  });
+  const weddingDate = wedding.date ? new Date(`${wedding.date}T00:00:00`) : null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const daysToWedding = weddingDate ? Math.ceil((weddingDate - today) / 86400000) : null;
+  const dateHint = daysToWedding === null ? "" : daysToWedding > 0 ? `${daysToWedding} hari lagi` : daysToWedding === 0 ? "Hari ini" : `${Math.abs(daysToWedding)} hari lalu`;
 
+  function goToDetailSection(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   function openClientDocument(type) {
     if (type === "receipt" && receiptPayments.length === 0) {
@@ -2084,19 +2118,57 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
   }
 
   return <section className="detailPage">
-    <div className="detailTopActions"><button className="backButton" onClick={onBack}><ArrowLeft size={17}/> Semua Wedding</button>{!readOnly&&<div><button onClick={onEdit}><Pencil size={15}/> Edit</button>{(f.remaining===0||wedding.completed)&&<button className={wedding.completed?"":"completeButton"} onClick={onToggleComplete}><CheckCircle2 size={15}/> {wedding.completed?"Buka Lagi":"Tandai Selesai"}</button>}<button className="danger" onClick={onDelete}><Trash2 size={15}/> Hapus</button></div>}</div>
+    <div className="detailTopActions"><button className="backButton" onClick={onBack}><ArrowLeft size={17}/> Daftar Klien</button>{!readOnly&&<div><button onClick={onEdit}><Pencil size={15}/> Edit</button>{(f.remaining===0||wedding.completed)&&<button className={wedding.completed?"":"completeButton"} onClick={onToggleComplete}><CheckCircle2 size={15}/> {wedding.completed?"Buka Lagi":"Tandai Selesai"}</button>}<button className="danger" onClick={onDelete}><Trash2 size={15}/> Hapus</button></div>}</div>
 
-    <section className="detailHero panel">
-      <div><small>1 · DATA PENGANTIN</small><h2>{wedding.couple}</h2><div className="infoLines"><span><Calendar size={15}/>{formatDate(wedding.date)}</span><span><MapPin size={15}/>{wedding.place}</span>{wedding.whatsapp&&<button onClick={onWhatsApp}><Phone size={15}/>{wedding.whatsapp}</button>}</div>{wedding.notes&&<p>{wedding.notes}</p>}</div>
-      <span className={`bigStatus ${paymentStatus(wedding)==="Lunas"||paymentStatus(wedding)==="Selesai"?"paid":""}`}>{paymentStatus(wedding)}</span>
+    <section className="clientOverview panel">
+      <div className="clientOverviewHead">
+        <div className="clientOverviewIcon"><Users size={25}/></div>
+        <div className="clientOverviewIdentity"><div><h2>{wedding.couple}</h2><span className={`bigStatus ${paymentStatus(wedding)==="Lunas"||paymentStatus(wedding)==="Selesai"?"paid":""}`}>{paymentStatus(wedding)}</span></div><p><Calendar size={15}/>{formatDate(wedding.date)}{dateHint&&<em>({dateHint})</em>}</p><p><MapPin size={15}/>{wedding.place || "Lokasi belum diisi"}</p></div>
+        {wedding.whatsapp&&<button className="clientWaQuick" onClick={onWhatsApp}><MessageCircle size={18}/><span>Klien</span></button>}
+      </div>
+      <div className="clientQuickTabs">
+        <button onClick={()=>goToDetailSection("client-summary")} className="active">Rangkuman</button>
+        <button onClick={()=>goToDetailSection("client-payment")}>Pembayaran</button>
+        <button onClick={()=>goToDetailSection("client-vendors")}>Vendor</button>
+        {canViewFinance&&<button onClick={()=>goToDetailSection("client-finance")}>Keuangan</button>}
+      </div>
     </section>
 
-    <section className="packagePanel panel">
+    <section className="panel clientSummaryPanel" id="client-summary">
+      <div className="summaryTitleRow"><div><small>RANGKUMAN KLIEN</small><h2>Informasi Utama</h2></div>{!readOnly&&<button className="softButton compact" onClick={onEdit}><Pencil size={15}/> Ubah</button>}</div>
+      <div className="clientSummaryGrid">
+        <div><small>Nama Pengantin</small><b>{wedding.couple}</b></div>
+        <div><small>Harga Deal</small><b>{rp(f.deal)}</b></div>
+        <div><small>Tanggal Wedding</small><b>{formatDate(wedding.date)}</b><span>{dateHint}</span></div>
+        <div><small>Total Uang Masuk</small><b className="positive">{rp(f.incoming)}</b></div>
+        <div><small>Lokasi</small><b>{wedding.place || "-"}</b></div>
+        <div><small>Sisa Tagihan</small><b className={f.remaining>0?"negative":"positive"}>{rp(f.remaining)}</b></div>
+        <div><small>Paket</small><b>{wedding.packageName || "-"}</b></div>
+        <div className="summaryProgressCell"><small>Progress Pembayaran</small><div className="summaryProgressLine"><div className="bar"><i style={{width:`${paymentProgress}%`}}/></div><b>{paymentProgress}%</b></div><span>{rp(f.incoming)} / {rp(f.netDeal)}</span></div>
+      </div>
+    </section>
+
+    <section className="panel paymentSnapshotPanel">
+      <div className="summaryTitleRow"><div><small>STATUS PEMBAYARAN</small><h2>Tahapan Klien</h2></div>{!readOnly&&f.remaining>0&&<button className="primary compact" onClick={onPay}><Plus size={15}/> Catat</button>}</div>
+      <div className="paymentSnapshotTrack">{invoiceStagePreview.map((stage, index)=><div className={`paymentSnapshotItem ${stage.status==="Lunas"?"done":stage.status==="Sebagian"?"partial":""}`} key={stage.key}><div className="snapshotDot">{stage.status==="Lunas"?<CheckCircle2 size={18}/>:index+1}</div><b>{stage.key==="final"?"Pelunasan":stage.key.toUpperCase()}</b><span>{stage.status}</span><small>{stage.paidDate?formatDate(stage.paidDate):stage.dueDate?`Target ${formatDate(stage.dueDate)}`:"Menunggu"}</small><em>{rp(stage.paidForStage)}</em></div>)}</div>
+    </section>
+
+    <section className="panel vendorContactPanel" id="client-vendors">
+      <div className="summaryTitleRow"><div><small>VENDOR TERKAIT</small><h2>Semua Vendor Wedding</h2><p>Nomor WhatsApp ditarik dari Master Vendor.</p></div>{!readOnly&&canViewFinance&&<button className="primary compact" onClick={onAddItem}><Plus size={15}/> Tambah Vendor</button>}</div>
+      {vendorContacts.length===0?<Empty text="Belum ada vendor terkait pada wedding ini."/>:<div className="vendorContactList">{vendorContacts.map((vendor)=><div className="vendorContactRow" key={vendor.id}><div className="vendorContactIcon"><Store size={18}/></div><div className="vendorContactMain"><small>{vendor.category}</small><b>{vendor.name}</b>{vendor.whatsapp&&<span>{vendor.whatsapp}</span>}</div>{vendor.whatsapp?<button className="vendorWaButton" onClick={()=>onVendorWhatsApp?.(vendor.whatsapp)}><MessageCircle size={17}/> Hubungi</button>:<span className="vendorNoWa">WA belum diisi</span>}</div>)}</div>}
+    </section>
+
+    <section className="panel quickDetailMenu">
+      <div className="summaryTitleRow"><div><small>MENU DETAIL</small><h2>Akses Cepat</h2></div></div>
+      <div className="quickDetailGrid"><button onClick={()=>goToDetailSection("client-payment")}><Banknote size={20}/><span>Pembayaran</span></button><button onClick={()=>goToDetailSection("client-package")}><Package size={20}/><span>Isi Paket</span></button>{canViewFinance&&<button onClick={()=>goToDetailSection("client-finance")}><TrendingUp size={20}/><span>Keuangan</span></button>}<button onClick={()=>goToDetailSection("client-documents")}><FileText size={20}/><span>Invoice</span></button></div>
+    </section>
+
+    <section className="packagePanel panel" id="client-package">
       <div className="sectionTitle"><div><small>2 · PAKET</small><h3>{wedding.packageName}</h3></div><Package size={24}/></div>
       {canViewFinance ? <div className="summaryFour"><MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih Paket" value={rp(f.baseNetDeal)}/><MiniStat label="Total Add-on" value={rp(f.addOns)}/><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Status" value={paymentStatus(wedding)}/></div> : <div className="summaryFour"><MiniStat label="Status" value={paymentStatus(wedding)}/></div>}
     </section>
 
-    <section className="panel">
+    <section className="panel" id="client-vendor-detail">
       <div className="panelHeader compactHeader"><div><small>3 · ISI PAKET / VENDOR</small><h2>{canViewFinance ? "Vendor & Biaya" : "Vendor"}</h2><p>{canViewFinance ? "Biaya aktual khusus wedding ini. Pembayaran vendor tersimpan sebagai riwayat." : "Daftar vendor untuk kebutuhan operasional wedding. Nominal pengeluaran hanya dapat dilihat Owner."}</p></div>{!readOnly&&canViewFinance&&<button className="primary compact" onClick={onAddItem}><Plus size={16}/> Tambah Item</button>}</div>
       {(wedding.packageItems||[]).length===0?<Empty text="Belum ada isi paket atau vendor."/>:<div className="expenseList">{(wedding.packageItems||[]).map((item)=>{
         const history = vendorPaymentHistory(item, wedding.date || "");
@@ -2116,7 +2188,7 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
       <div className="addonTotalBar"><span>Total Add-on</span><b>{rp(f.addOns)}</b></div>
     </section>
 
-    <section className="panel">
+    <section className="panel" id="client-payment">
       <div className="panelHeader compactHeader"><div><small>5 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal mengikuti Total Tagihan (Deal Bersih + Add-on). DP manual dan setiap cicilan/catatan pembayaran masuk otomatis mengurangi sisa DP berikutnya sampai pelunasan.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
       <div className="paymentScheduleList">
         {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
@@ -2144,14 +2216,14 @@ function WeddingDetail({ wedding, readOnly=false, canViewFinance=false, onBack, 
       })}</div>
     </section>
 
-    <section className="panel clientDocsPanel">
+    <section className="panel clientDocsPanel" id="client-documents">
       <div className="panelHeader compactHeader"><div><small>7 · DOKUMEN KLIEN</small><h2>Invoice & Kwitansi</h2><p>Dokumen hanya membaca data yang sudah ada dan tidak membuat transaksi baru pada pembukuan.</p></div></div>
       <div className="clientDocActions"><button className="primary" onClick={()=>openClientDocument("invoice")}><FileText size={17}/> Invoice Tagihan</button><button className="softButton" onClick={()=>openClientDocument("receipt")}><ReceiptText size={17}/> Kwitansi Pembayaran</button></div>
     </section>
 
-    {clientDoc && <div className="modal clientDocModal" onMouseDown={(e)=>{if(e.target===e.currentTarget)setClientDoc(null)}}><div className="clientDocBox"><button className="close" onClick={()=>setClientDoc(null)}><X size={17}/></button><small>DOKUMEN KLIEN</small><h3>{clientDoc==="invoice"?"Invoice Tagihan":"Kwitansi Pembayaran"}</h3>{clientDoc==="invoice"?<div className="docPreviewSummary"><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)} strong/></div>:<><label className="receiptSelectLabel">Pilih pembayaran<select value={selectedReceipt?.id||""} onChange={(e)=>setReceiptId(e.target.value)}>{receiptPayments.map((payment)=><option key={payment.id} value={payment.id}>{payment.label} · {rp(payment.amount)}{payment.date?` · ${formatDate(payment.date)}`:""}</option>)}</select></label>{selectedReceipt&&<div className="receiptPreview"><small>KWITANSI UNTUK</small><b>{selectedReceipt.label}</b><strong>{rp(selectedReceipt.amount)}</strong><span>{selectedReceipt.date?formatDate(selectedReceipt.date):"-"}</span></div>}</>}<div className="clientDocButtons"><button className="primary" onClick={()=>printClientDocument(clientDoc)}><Printer size={17}/> Cetak / Simpan PDF</button><button className="waDocButton" onClick={()=>sendDocumentWhatsApp(clientDoc)}><MessageCircle size={17}/> Kirim ke WhatsApp</button></div><p className="docHint">Untuk mengirim file PDF sebagai lampiran, pilih “Simpan sebagai PDF” saat mencetak, lalu lampirkan file tersebut di chat WhatsApp yang terbuka.</p></div></div>}
+    {clientDoc && <div className="modal clientDocModal" onMouseDown={(e)=>{if(e.target===e.currentTarget)setClientDoc(null)}}><div className="clientDocBox"><button className="close" onClick={()=>setClientDoc(null)}><X size={17}/></button><small>DOKUMEN KLIEN</small><h3>{clientDoc==="invoice"?"Invoice Tagihan":"Kwitansi Pembayaran"}</h3>{clientDoc==="invoice"?<><div className="docPreviewSummary"><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)} strong/></div><div className="invoiceStagePreview"><div className="invoiceStagePreviewHead"><b>Status Tahapan Pembayaran</b><span>Otomatis dari transaksi yang sudah tercatat</span></div>{invoiceStagePreview.map((stage)=><div className="invoiceStagePreviewRow" key={stage.key}><div><b>{stage.displayLabel}</b>{stage.dueDate&&<small>Target {formatDate(stage.dueDate)}</small>}</div><div className="invoiceStagePreviewStatus"><span className={stage.status==="Lunas"?"paid":stage.status==="Sebagian"?"partial":"waiting"}>{stage.status}</span>{stage.paidDate&&<small>{formatDate(stage.paidDate)}</small>}</div><div className="invoiceStagePreviewAmount"><b>{rp(stage.paidForStage)}</b><small>dari {rp(stage.planned)}</small></div></div>)}</div></>:<><label className="receiptSelectLabel">Pilih pembayaran<select value={selectedReceipt?.id||""} onChange={(e)=>setReceiptId(e.target.value)}>{receiptPayments.map((payment)=><option key={payment.id} value={payment.id}>{payment.label} · {rp(payment.amount)}{payment.date?` · ${formatDate(payment.date)}`:""}</option>)}</select></label>{selectedReceipt&&<div className="receiptPreview"><small>KWITANSI UNTUK</small><b>{selectedReceipt.label}</b><strong>{rp(selectedReceipt.amount)}</strong><span>{selectedReceipt.date?formatDate(selectedReceipt.date):"-"}</span></div>}</>}<div className="clientDocButtons"><button className="primary" onClick={()=>printClientDocument(clientDoc)}><Printer size={17}/> Cetak / Simpan PDF</button><button className="waDocButton" onClick={()=>sendDocumentWhatsApp(clientDoc)}><MessageCircle size={17}/> Kirim ke WhatsApp</button></div><p className="docHint">Untuk mengirim file PDF sebagai lampiran, pilih “Simpan sebagai PDF” saat mencetak, lalu lampirkan file tersebut di chat WhatsApp yang terbuka.</p></div></div>}
 
-    {canViewFinance && <section className="panel profitPanel">
+    {canViewFinance && <section className="panel profitPanel" id="client-finance">
       <div className="sectionTitle"><div><small>8–9 · PENGELUARAN & RINGKASAN KEUNTUNGAN</small><h3>Posisi Keuangan Wedding</h3></div><TrendingUp size={24}/></div>
       <div className="financialSummaryGrid">
         <MiniStat label="Harga Deal" value={rp(f.deal)}/><MiniStat label="Cashback / Potongan" value={rp(f.discount)}/><MiniStat label="Deal Bersih Paket" value={rp(f.baseNetDeal)}/><MiniStat label="Total Add-on" value={rp(f.addOns)}/><MiniStat label="Total Tagihan" value={rp(f.netDeal)}/><MiniStat label="Uang Masuk" value={rp(f.incoming)}/><MiniStat label="Sisa Tagihan" value={rp(f.remaining)}/><MiniStat label="Total Pengeluaran" value={rp(f.expenses)}/><MiniStat label="Sudah Dibayar Vendor" value={rp(f.expensesPaid)}/><MiniStat label="Sisa Utang Vendor" value={rp(f.vendorDebt)}/><MiniStat label="Estimasi Untung" value={rp(f.profit)} strong/><MiniStat label="Uang Pegangan Sekarang" value={rp(f.cashOnHand)} strong/>

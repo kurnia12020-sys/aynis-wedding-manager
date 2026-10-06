@@ -41,8 +41,17 @@ V4.23 - PWA / Add to Home Screen
 - No accounting, Supabase, invoice, payment, or business-logic changes.
 
 
-## V4.25 — Invoice Payment Stage Status
+## V4.26 — Invoice Preview Payment Status
 - Invoice kini menampilkan status tahapan pembayaran: DP 1 / Booking Tanggal, DP 2 / Target 30%, DP 3 / Target 70%, dan Pelunasan.
 - Status otomatis membaca total pembayaran yang sudah tercatat: Lunas, Sebagian, atau Menunggu Pembayaran.
 - Menampilkan tanggal pembayaran bila tersedia serta nominal terbayar dibanding target tahap.
 - Tidak membuat transaksi baru; invoice hanya membaca data pembayaran yang sudah ada.
+
+
+## V4.27 — Client Summary & Vendor WhatsApp
+- Daftar Klien dibuat lebih informatif dengan progress pembayaran dan ringkasan deal.
+- Detail Klien mendapat Rangkuman utama di bagian atas.
+- Status DP1, DP2, DP3, dan Pelunasan tampil sebagai snapshot cepat.
+- Semua vendor terkait ditampilkan tanpa dipotong.
+- Nomor WhatsApp vendor diambil dari Master Vendor dan tombol Hubungi membuka WhatsApp langsung.
+- Menu detail lama tetap dipertahankan, dengan tombol akses cepat agar navigasi lebih praktis di HP.
