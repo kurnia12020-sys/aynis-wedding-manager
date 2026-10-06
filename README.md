@@ -1,3 +1,11 @@
+# AYNIS Wedding Manager V4.31 — Searchable Vendor & Package
+
+- Vendor picker now supports typing with autocomplete suggestions from Master Vendor.
+- Package picker now supports typing with autocomplete suggestions from Master Harga.
+- Selecting a saved vendor auto-fills name, category, and reference price.
+- Selecting a saved package auto-fills the default deal price.
+- Manual input remains available.
+
 # AYNIS Wedding Manager V4.29 — Vendor Wedding Date
 
 Perubahan:

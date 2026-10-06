@@ -451,6 +451,7 @@ export default function Page() {
   const [packageOpen, setPackageOpen] = useState(false);
   const [packageWeddingId, setPackageWeddingId] = useState(null);
   const [packageForm, setPackageForm] = useState(emptyPackageItem);
+  const [vendorLookup, setVendorLookup] = useState("");
 
   const [addOnOpen, setAddOnOpen] = useState(false);
   const [addOnWeddingId, setAddOnWeddingId] = useState(null);
@@ -1174,6 +1175,7 @@ export default function Page() {
   function openNewPackageItem(wedding) {
     setPackageWeddingId(wedding.id);
     setPackageForm(emptyPackageItem);
+    setVendorLookup("");
     setPackageOpen(true);
   }
 
@@ -1189,6 +1191,8 @@ export default function Page() {
       vendorPayments: Array.isArray(item.vendorPayments) ? item.vendorPayments : [],
       notes: item.notes || "",
     });
+    const linkedVendor = vendors.find((v) => String(v.id) === String(item.vendorId));
+    setVendorLookup(linkedVendor?.name || item.name || "");
     setPackageOpen(true);
   }
 
@@ -1198,6 +1202,7 @@ export default function Page() {
       setPackageForm((f) => ({ ...f, vendorId: "" }));
       return;
     }
+    setVendorLookup(vendor.name);
     setPackageForm((f) => ({
       ...f,
       vendorId: String(vendor.id),
@@ -1205,6 +1210,14 @@ export default function Page() {
       category: vendor.category,
       actualCost: f.actualCost || String(vendor.referencePrice || ""),
     }));
+  }
+
+  function lookupVendorByName(value) {
+    setVendorLookup(value);
+    const normalized = value.trim().toLowerCase();
+    const vendor = vendors.find((v) => (v.name || "").trim().toLowerCase() === normalized);
+    if (vendor) return chooseVendor(vendor.id);
+    setPackageForm((f) => ({ ...f, vendorId: "" }));
   }
 
   function savePackageItem(event) {
@@ -1807,7 +1820,7 @@ export default function Page() {
 
             <section className="formSection">
               <div className="formSectionTitle"><span>2</span><div><small>PAKET</small><b>Paket & Harga Deal</b></div></div>
-              <Field label="Pilih Paket dari Master Harga"><select value={packages.find((p)=>p.name===weddingForm.packageName)?String(packages.find((p)=>p.name===weddingForm.packageName).id):"__manual__"} onChange={(e)=>chooseMasterPackage(e.target.value)}><option value="__manual__">— Paket manual / khusus —</option>{packages.filter((p)=>p.active!==false).map((pkg)=><option key={pkg.id} value={pkg.id}>{pkg.name} · {rp(pkg.price)}</option>)}</select><em>Pilih paket untuk mengisi nama dan harga otomatis.</em></Field>
+              <Field label="Cari / Pilih Paket dari Master Harga"><input list="package-master-suggestions" value={weddingForm.packageName} onChange={(e)=>{const value=e.target.value; const pkg=packages.find((p)=>p.active!==false && (p.name||"").trim().toLowerCase()===value.trim().toLowerCase()); setWeddingForm((f)=>({...f,packageName:value,...(pkg?{dealPrice:String(pkg.price??"")}:{})}));}} placeholder="Ketik nama paket..."/><datalist id="package-master-suggestions">{packages.filter((p)=>p.active!==false).map((pkg)=><option key={pkg.id} value={pkg.name}>{rp(pkg.price)}</option>)}</datalist><em>Ketik nama paket. Pilihan tersimpan akan muncul otomatis dan harga default akan terisi saat dipilih.</em></Field>
               <Field label="Nama Paket"><input id="manual-package-name" value={weddingForm.packageName} onChange={(e)=>setWeddingForm({...weddingForm,packageName:e.target.value})} placeholder="Contoh: Platinum"/><em>Nama tetap bisa diubah untuk paket khusus.</em></Field>
               <div className="formTwoCols">
                 <Field label="Harga Deal Klien"><input type="text" inputMode="numeric" value={formatMoneyInput(weddingForm.dealPrice)} onChange={(e)=>setWeddingForm({...weddingForm,dealPrice:onlyDigits(e.target.value)})} placeholder="15.000.000"/>{weddingForm.dealPrice&&<em>{rp(weddingForm.dealPrice)}</em>}</Field>
@@ -1825,7 +1838,7 @@ export default function Page() {
               {(weddingForm.packageItems||[]).length===0 ? <div className="miniEmpty">Belum ada isi paket. Tekan <b>Tambah</b> untuk memasukkan vendor atau biaya.</div> : <div className="draftItems">
                 {(weddingForm.packageItems||[]).map((item,index)=><div className="draftItem" key={item.id || index}>
                   <div className="draftItemHead"><b>Item {index+1}</b><button type="button" className="removeDraft" onClick={()=>removeWeddingDraftItem(index)}><Trash2 size={14}/> Hapus</button></div>
-                  <Field label="Vendor (opsional)"><select value={item.vendorId||""} onChange={(e)=>chooseWeddingDraftVendor(index,e.target.value)}><option value="">— Input manual —</option>{vendors.map((v)=><option key={v.id} value={v.id}>{v.name} · {v.category}</option>)}</select></Field>
+                  <Field label="Cari Vendor (opsional)"><input list={`draft-vendor-suggestions-${index}`} value={item.name||""} onChange={(e)=>{const value=e.target.value; const vendor=vendors.find((v)=>(v.name||"").trim().toLowerCase()===value.trim().toLowerCase()); if(vendor){chooseWeddingDraftVendor(index,vendor.id);}else{updateWeddingDraftItem(index,{name:value,vendorId:""});}}} placeholder="Ketik nama vendor..."/><datalist id={`draft-vendor-suggestions-${index}`}>{vendors.map((v)=><option key={v.id} value={v.name}>{v.category}</option>)}</datalist></Field>
                   <div className="formTwoCols">
                     <Field label="Nama Item / Vendor"><input id={`draft-name-${item.id}`} value={item.name||""} onChange={(e)=>updateWeddingDraftItem(index,{name:e.target.value})} placeholder="Dekorasi / Foto Video"/></Field>
                     <Field label="Kategori"><input value={item.category||""} onChange={(e)=>updateWeddingDraftItem(index,{category:e.target.value})} placeholder="Dekorasi / Foto / Crew"/></Field>
@@ -1881,7 +1894,7 @@ export default function Page() {
         <Modal onClose={()=>setPackageOpen(false)}>
           <form onSubmit={savePackageItem}>
             <ModalClose onClick={()=>setPackageOpen(false)}/><small>ISI PAKET / PENGELUARAN</small><h3>{packageForm.id?"Edit Item":"Tambah Item / Vendor"}</h3>
-            <Field label="Pilih Vendor (opsional)"><select value={packageForm.vendorId} onChange={(e)=>chooseVendor(e.target.value)}><option value="">— Input manual / biaya lain —</option>{vendors.map((v)=><option key={v.id} value={v.id}>{v.name} · {v.category}</option>)}</select><em>Harga referensi hanya membantu mengisi awal dan tetap bisa diubah.</em></Field>
+            <Field label="Cari / Pilih Vendor (opsional)"><input list="vendor-master-suggestions" value={vendorLookup} onChange={(e)=>lookupVendorByName(e.target.value)} placeholder="Ketik nama vendor yang sudah disimpan..."/><datalist id="vendor-master-suggestions">{vendors.map((v)=><option key={v.id} value={v.name}>{v.category}</option>)}</datalist><em>Ketik nama vendor. Saran dari Master Vendor akan muncul otomatis; pilih untuk mengisi nama, kategori, dan harga referensi.</em></Field>
             <Field label="Nama Item / Vendor"><input value={packageForm.name} onChange={(e)=>setPackageForm({...packageForm,name:e.target.value})} placeholder="Dekorasi / Foto Video / Transport"/></Field>
             <Field label="Kategori"><input value={packageForm.category} onChange={(e)=>setPackageForm({...packageForm,category:e.target.value})} placeholder="Dekorasi / Foto / Crew / Lainnya"/></Field>
             <Field label="Biaya Aktual Wedding Ini"><input type="text" inputMode="numeric" value={formatMoneyInput(packageForm.actualCost)} onChange={(e)=>setPackageForm({...packageForm,actualCost:onlyDigits(e.target.value)})} placeholder="5.000.000"/></Field>
