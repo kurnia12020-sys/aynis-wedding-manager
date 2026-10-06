@@ -1,3 +1,11 @@
+# AYNIS Wedding Manager V4.28 — Client Notes in Main Summary
+
+Perubahan dari V4.27:
+- Menampilkan **Catatan Pengantin / Acara** langsung pada Rangkuman Klien / Informasi Utama.
+- Catatan tampil penuh dan mudah dibaca tanpa membuka form Edit.
+- Jika belum ada catatan, tampil placeholder "Belum ada catatan pengantin / acara.".
+- Seluruh fitur V4.27 tetap dipertahankan, termasuk semua vendor terkait dan tombol WhatsApp.
+
 # AYNIS Wedding Manager V4.9 — Admin Save & Multi-user Sync
 
 Perbaikan V4.9:

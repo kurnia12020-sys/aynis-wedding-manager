@@ -2145,6 +2145,7 @@ function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=fal
         <div><small>Sisa Tagihan</small><b className={f.remaining>0?"negative":"positive"}>{rp(f.remaining)}</b></div>
         <div><small>Paket</small><b>{wedding.packageName || "-"}</b></div>
         <div className="summaryProgressCell"><small>Progress Pembayaran</small><div className="summaryProgressLine"><div className="bar"><i style={{width:`${paymentProgress}%`}}/></div><b>{paymentProgress}%</b></div><span>{rp(f.incoming)} / {rp(f.netDeal)}</span></div>
+        <div className="summaryNotesCell"><small>Catatan Pengantin / Acara</small><b>{wedding.notes?.trim() || "Belum ada catatan pengantin / acara."}</b></div>
       </div>
     </section>
 
