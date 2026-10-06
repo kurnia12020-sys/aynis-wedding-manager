@@ -326,3 +326,6 @@ nav button{font-size:9px}
 /* V4.33 — Scroll To Top Button */
 .scrollTopButton{position:fixed;right:max(16px,calc((100vw - 1180px)/2 + 16px));bottom:86px;z-index:45;border:1px solid #d9c8cf;background:rgba(255,255,255,.96);color:#8d6074;border-radius:999px;padding:10px 13px;display:flex;align-items:center;gap:6px;font-weight:850;font-size:11px;box-shadow:0 10px 26px rgba(84,54,67,.16);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:transform .15s ease,box-shadow .15s ease,background .15s ease}.scrollTopButton:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(84,54,67,.2);background:#fff}.scrollTopButton:active{transform:translateY(0) scale(.97)}
 @media(max-width:560px){.scrollTopButton{right:12px;bottom:82px;width:44px;height:44px;padding:0;justify-content:center;border-radius:50%}.scrollTopButton span{display:none}.scrollTopButton svg{width:20px;height:20px}}
+
+/* V4.34 — branded invoice / receipt */
+.clientDocBrand{display:flex;align-items:center;gap:12px;padding-right:40px;margin-bottom:14px}.clientDocBrand img{width:64px;height:64px;object-fit:contain;flex:0 0 auto}.clientDocBrand h3{margin:3px 0 0}@media(max-width:520px){.clientDocBrand img{width:54px;height:54px}}

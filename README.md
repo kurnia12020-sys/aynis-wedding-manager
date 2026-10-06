@@ -93,3 +93,10 @@ V4.23 - PWA / Add to Home Screen
 - Header fokus identitas acara, rangkuman fokus pembayaran & paket.
 - Catatan pengantin/acara dibuat menjadi kartu khusus yang lebih mudah dibaca.
 - Tidak mengubah logika data maupun alur fitur V4.31.
+
+
+## V4.34 — Invoice & Receipt Logo
+- Added AYNIS ANIS MAKEUP logo asset at `public/aynis-logo.png`.
+- Logo now appears in the Invoice/Kwitansi preview modal.
+- Logo now appears in printed / Save as PDF Invoice and Kwitansi documents.
+- Based on V4.33, preserving Scroll To Top and prior features.
