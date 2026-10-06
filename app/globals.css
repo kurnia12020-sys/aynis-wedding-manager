@@ -356,3 +356,38 @@ nav button{font-size:9px}
 .homeUpcomingProgress>div:first-child b{font-size:10px;color:#71545a}
 .homeUpcomingProgress .bar{height:4px}
 @media(max-width:480px){.homeUpcomingGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.homeUpcomingCard{padding:10px;border-radius:14px;gap:8px}.homeUpcomingDate{width:36px;height:36px;flex-basis:36px}.homeUpcomingDate b{font-size:14px}.homeUpcomingStatus{max-width:66px;font-size:7px;padding:4px 5px}.homeUpcomingBody h4{font-size:12px}.homeUpcomingBody p{font-size:9px}.homeUpcomingPlace{font-size:8px}.homeUpcomingProgress>div:first-child{font-size:8px}.homeUpcomingProgress>div:first-child b{font-size:9px}}
+
+/* V4.37 — Compact Home Finance Summary */
+@media (max-width: 560px){
+  .stats,.statsSix{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    margin:12px 0 15px!important;
+  }
+  .stats .card,.statsSix .card{
+    min-width:0;
+    min-height:94px;
+    padding:13px 12px!important;
+    border-radius:16px!important;
+    gap:5px!important;
+  }
+  .stats .card small,.statsSix .card small{
+    font-size:9px!important;
+    letter-spacing:.11em!important;
+    line-height:1.25;
+  }
+  .stats .card strong,.statsSix .card strong{
+    font-size:16px!important;
+    line-height:1.18;
+    overflow-wrap:anywhere;
+  }
+  .stats .card span,.statsSix .card span{
+    font-size:10px!important;
+    line-height:1.3;
+  }
+}
+@media (max-width: 360px){
+  .stats,.statsSix{gap:7px!important}
+  .stats .card,.statsSix .card{padding:11px 10px!important;min-height:90px}
+  .stats .card strong,.statsSix .card strong{font-size:14px!important}
+}

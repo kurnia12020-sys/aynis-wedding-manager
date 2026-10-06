@@ -115,3 +115,9 @@ V4.23 - PWA / Add to Home Screen
 - Card dibuat lebih compact dan modern dengan tanggal, status pembayaran, lokasi, dan progress pembayaran.
 - Tap card membuka detail wedding.
 - Semua fitur V4.35 dipertahankan.
+
+
+## V4.37 — Compact Home Finance Summary
+- Home financial summary cards remain 2 columns on phone screens.
+- Reduced card height, padding, label size, value size and supporting text for a cleaner mobile dashboard.
+- No calculation or data logic changes.
