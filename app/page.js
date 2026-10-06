@@ -1782,8 +1782,8 @@ export default function Page() {
             <div><small>AGENDA TERDEKAT</small><h3>Wedding Mendatang</h3></div>
             <button className="linkButton" onClick={() => setTab("Kalender")}>Lihat Kalender</button>
           </div>
-          <section className="list">
-            {!ready ? <Empty text="Memuat data..."/> : upcoming.length === 0 ? <Empty text="Belum ada wedding. Tekan Tambah Wedding untuk membuat data pertama."/> : upcoming.slice(0, 4).map((w) => <WeddingRow key={w.id} wedding={w} onDetail={openDetail} onWhatsApp={openWhatsApp}/>) }
+          <section className="homeUpcomingGrid">
+            {!ready ? <Empty text="Memuat data..."/> : upcoming.length === 0 ? <Empty text="Belum ada wedding. Tekan Tambah Wedding untuk membuat data pertama."/> : upcoming.slice(0, 6).map((w) => <UpcomingWeddingCard key={w.id} wedding={w} onDetail={openDetail}/>) }
           </section>
         </>
       )}
@@ -2155,6 +2155,29 @@ function Empty({ text }) { return <div className="emptyState">{text}</div>; }
 function Field({ label, children }) { return <label>{label}{children}</label>; }
 function Modal({ children, onClose }) { return <div className="modal" onMouseDown={(e)=>e.target===e.currentTarget&&onClose()}>{children}</div>; }
 function ModalClose({ onClick }) { return <button type="button" className="close" onClick={onClick}><X/></button>; }
+
+function UpcomingWeddingCard({ wedding, onDetail }) {
+  const f = financials(wedding);
+  const pct = f.netDeal ? Math.min(100, Math.round((f.incoming / f.netDeal) * 100)) : 0;
+  const dt = wedding.date ? new Date(`${wedding.date}T00:00:00`) : null;
+  const day = dt && !Number.isNaN(dt.getTime()) ? dt.getDate() : "–";
+  const month = dt && !Number.isNaN(dt.getTime()) ? monthNames[dt.getMonth()].slice(0,3) : "";
+  return <button type="button" className="homeUpcomingCard" onClick={()=>onDetail(wedding)}>
+    <div className="homeUpcomingTop">
+      <div className="homeUpcomingDate"><b>{day}</b><span>{month}</span></div>
+      <span className={`homeUpcomingStatus ${f.remaining===0?"paid":""}`}>{paymentStatus(wedding)}</span>
+    </div>
+    <div className="homeUpcomingBody">
+      <h4>{wedding.couple}</h4>
+      <p>{formatDate(wedding.date)}</p>
+      {wedding.place && <span className="homeUpcomingPlace"><MapPin size={12}/>{wedding.place}</span>}
+    </div>
+    <div className="homeUpcomingProgress">
+      <div><span>Pembayaran</span><b>{pct}%</b></div>
+      <div className="bar"><i style={{width:`${pct}%`}}/></div>
+    </div>
+  </button>;
+}
 
 function WeddingRow({ wedding, onDetail, onWhatsApp }) {
   const f = financials(wedding);

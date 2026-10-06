@@ -108,3 +108,10 @@ V4.23 - PWA / Add to Home Screen
 - Hasil mencoba mengisi nama, WhatsApp, tanggal, lokasi, paket, harga deal, dan catatan.
 - Semua hasil tetap editable dan tidak disimpan sebelum tombol Simpan Wedding ditekan.
 - Mendukung sampai 5 screenshot per import.
+
+
+## V4.36 — Compact Home Wedding Grid
+- Agenda Terdekat / Wedding Mendatang di Home menjadi grid 2 klien per baris.
+- Card dibuat lebih compact dan modern dengan tanggal, status pembayaran, lokasi, dan progress pembayaran.
+- Tap card membuka detail wedding.
+- Semua fitur V4.35 dipertahankan.
