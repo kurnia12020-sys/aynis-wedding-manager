@@ -419,3 +419,35 @@ nav button{font-size:9px}
 .stageDateFields label{display:grid;gap:4px;font-size:10px;color:#755c57;font-weight:600}
 .stageDateFields input{min-width:0;max-width:175px;width:145px;padding:7px;border:1px solid #e4d4cb;border-radius:8px;background:#fff;color:#493733;font-size:12px}
 @media(max-width:420px){.paymentStage.paymentStageCompact{padding:10px}.stageCompactInfo{grid-template-columns:minmax(0,1fr) minmax(118px,44%)}.stageCompactHeading>b{font-size:12px}.stageCompactStatus{font-size:9px}.stageDateFields input{width:130px}}
+
+/* V4.41 — Compact Vendor & Biaya: presentation only, no financial logic changes */
+#client-vendor-detail .expenseList{gap:8px}
+#client-vendor-detail .expenseCard{border-radius:13px}
+#client-vendor-detail .expenseRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;padding:11px 12px;align-items:start}
+#client-vendor-detail .expenseMain{min-width:0;gap:2px}
+#client-vendor-detail .expenseMain small{font-size:9px;letter-spacing:.09em}
+#client-vendor-detail .expenseMain b{font-size:14px;line-height:1.25}
+#client-vendor-detail .expenseMoney{align-items:flex-end;gap:3px}
+#client-vendor-detail .expenseMoney b{font-size:14px}
+#client-vendor-detail .expenseMoney span{font-size:10px}
+#client-vendor-detail .expenseMoney .vendorStatus{font-size:9px;padding:3px 7px}
+#client-vendor-detail .iconActions{grid-column:1/-1;display:flex;gap:6px;justify-content:flex-end}
+#client-vendor-detail .iconActions button{padding:6px;min-width:30px;min-height:30px;justify-content:center}
+#client-vendor-detail .vendorPaymentBar{flex-direction:row;align-items:center;gap:8px;padding:8px 12px}
+#client-vendor-detail .vendorPaymentBar>div{gap:2px;min-width:0}
+#client-vendor-detail .vendorPaymentBar small{font-size:9px;letter-spacing:.07em}
+#client-vendor-detail .vendorPaymentBar b{font-size:12px}
+#client-vendor-detail .vendorPaymentBar button{width:auto;flex-shrink:0;min-height:32px;padding:6px 10px;font-size:11px}
+#client-vendor-detail .vendorPaymentRow{padding:8px 11px}
+@media(max-width:480px){
+ #client-vendor-detail{padding:14px 12px}
+ #client-vendor-detail .panelHeader{gap:8px;margin-bottom:11px}
+ #client-vendor-detail .panelHeader h2{font-size:25px}
+ #client-vendor-detail .panelHeader p{font-size:12px;margin:4px 0}
+ #client-vendor-detail .panelHeader .primary{padding:9px 12px;font-size:12px}
+ #client-vendor-detail .expenseRow{grid-template-columns:minmax(0,1fr) auto}
+ #client-vendor-detail .expenseMoney{align-items:flex-end}
+ #client-vendor-detail .iconActions{grid-column:1/-1;margin-top:-2px}
+ #client-vendor-detail .vendorPaymentBar{flex-direction:row;align-items:center}
+ #client-vendor-detail .vendorPaymentBar button{width:auto;justify-content:center}
+}

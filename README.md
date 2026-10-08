@@ -1,3 +1,7 @@
+# AYNIS WEDDING MANAGER V4.41 — Compact Vendor Cards
+
+Perubahan khusus CSS pada bagian Vendor & Biaya di detail wedding. Data, kalkulasi, histori, tombol edit/hapus dan Bayar Vendor tetap menggunakan kode V4.40.
+
 # V4.40 — Compact Payment Schedule
 
 Berbasis V4.39. Kartu DP1, DP2, DP3, dan Pelunasan dibuat ringkas untuk layar HP. Nominal tetap bisa diedit langsung (klik Simpan jika berubah). Tanggal jatuh tempo dan tanggal pembayaran bisa diedit melalui **Edit Tanggal** pada masing-masing tahap. Status bayar dan unggah/lihat/ganti bukti pembayaran tetap tersedia. Tanggal manual dipertahankan ketika data jadwal dihitung ulang.
