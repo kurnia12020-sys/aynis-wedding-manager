@@ -1,3 +1,11 @@
+# AYNIS WEDDING MANAGER V4.39 — Bukti Pembayaran Per Tahap
+
+Pengembangan dari V4.38. Di **Detail Wedding → Jadwal & Riwayat Pembayaran**, setiap tahap (DP1, DP2, DP3, Pelunasan) memiliki tombol **Upload Bukti**, **Lihat Bukti**, dan **Ganti Bukti**. Bukti disimpan privat di bucket `wedding-documents` yang sudah dibuat di Supabase, dengan referensi tersimpan dalam `paymentSchedule` pada `app_state`. Mengunggah bukti **tidak otomatis menandai pembayaran lunas** dan tidak mengubah nominal. Centang status dibayar tetap secara manual. Penggantian bukti menghapus file lama setelah referensi baru sukses tersimpan.
+
+Persyaratan: akun Owner/Admin aktif, koneksi Supabase, bucket privat `wedding-documents` dan policy akses yang telah diterapkan. Ukuran maksimum 5 MB, JPG/PNG/WEBP/PDF.
+
+**Catatan penting:** Uji upload, buka, dan ganti bukti pada wedding percobaan sebelum menggunakannya untuk transaksi nyata. Aplikasi melakukan sinkronisasi JSON `app_state`; hindari mengubah wedding yang sama secara bersamaan dari beberapa perangkat. Tidak ada migrasi tabel tambahan. Jangan jalankan ulang setup database dari nol.
+
 # AYNIS Wedding Manager V4.31 — Searchable Vendor & Package
 
 - Vendor picker now supports typing with autocomplete suggestions from Master Vendor.

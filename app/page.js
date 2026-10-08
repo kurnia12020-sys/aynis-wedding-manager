@@ -790,7 +790,7 @@ export default function Page() {
         weddings,
         vendors,
         packages,
-        schema_version: 47,
+        schema_version: 48,
         updated_at: new Date().toISOString(),
       }).eq("workspace_id", workspaceId);
       if (error) {
@@ -1165,7 +1165,7 @@ export default function Page() {
         : [record, ...cloudWeddings.filter((w) => w.id !== record.id)];
       const { error: saveError } = await supabase
         .from("app_state")
-        .update({ weddings: nextWeddings, schema_version: 47, updated_at: new Date().toISOString() })
+        .update({ weddings: nextWeddings, schema_version: 48, updated_at: new Date().toISOString() })
         .eq("workspace_id", workspaceId);
       if (saveError) throw saveError;
       setCloudState("online");
@@ -1260,7 +1260,7 @@ export default function Page() {
       if (saveError) throw saveError;
       setWeddings(updated);
       if (String(selectedWeddingId) === String(id)) setSelectedWeddingId(null);
-      const paths = [existing.ktpPath, ...(existing.payments||[]).map(x => x.proofPath)].filter(Boolean);
+      const paths = [existing.ktpPath, ...(existing.payments||[]).map(x => x.proofPath), ...(existing.paymentSchedule||[]).map(x => x.proofPath)].filter(Boolean);
       if (paths.length) {
         const {error:storageError} = await supabase.storage.from(PRIVATE_BUCKET).remove(paths);
         if (storageError) alert("Data wedding telah dihapus, tetapi sebagian lampiran perlu dibersihkan manual: " + storageError.message);
@@ -1353,6 +1353,37 @@ export default function Page() {
     }));
   }
 
+  async function uploadStagePaymentProof(wedding, stageKey, file) {
+    if (!file || documentBusy) return;
+    if (!canEditData || !cloudReady || !workspaceId) return alert("Upload bukti memerlukan akses Owner/Admin dan koneksi Supabase.");
+    const current = defaultPaymentSchedule(wedding, wedding.paymentSchedule).find((stage) => stage.key === stageKey);
+    if (!current) return alert("Tahap pembayaran tidak ditemukan.");
+    let newPath = "";
+    setDocumentBusy(true);
+    try {
+      newPath = await uploadPrivateDocument(file, workspaceId, wedding.id, `stage-${stageKey}`);
+      // Save the reference to the same cloud record, so other devices can see the proof.
+      const updatedWeddings = weddings.map((w) => String(w.id) === String(wedding.id) ? {
+        ...w, paymentSchedule: defaultPaymentSchedule(w, w.paymentSchedule).map((item) =>
+          item.key === stageKey ? { ...item, proofPath: newPath } : item),
+      } : w);
+      const { error } = await supabase.from("app_state").update({
+        weddings: updatedWeddings, updated_at: new Date().toISOString(),
+      }).eq("workspace_id", workspaceId);
+      if (error) throw error;
+      setWeddings(updatedWeddings);
+      const previousPath = current.proofPath;
+      if (previousPath && previousPath !== newPath) {
+        const { error: removeError } = await supabase.storage.from(PRIVATE_BUCKET).remove([previousPath]);
+        if (removeError) console.warn("Bukti lama belum dapat dihapus:", removeError.message);
+      }
+      alert("Bukti pembayaran berhasil disimpan.");
+    } catch (error) {
+      if (newPath) await supabase.storage.from(PRIVATE_BUCKET).remove([newPath]);
+      alert("Gagal menyimpan bukti pembayaran: " + error.message);
+    } finally { setDocumentBusy(false); }
+  }
+
   function togglePaymentScheduleItem(wedding, stage) {
     const nextPaid = !stage.paid;
     updatePaymentScheduleItem(wedding.id, stage.key, {
@@ -1366,7 +1397,7 @@ export default function Page() {
     const current = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
     const freshBase = defaultPaymentSchedule(wedding, null).map((base) => {
       const oldStage = current.find((item) => item.key === base.key);
-      return { ...base, paid: Boolean(oldStage?.paid), paidDate: oldStage?.paidDate || "", amount: oldStage?.paid ? Number(oldStage.amount || 0) : base.amount };
+      return { ...base, paid: Boolean(oldStage?.paid), paidDate: oldStage?.paidDate || "", proofPath: oldStage?.proofPath || "", amount: oldStage?.paid ? Number(oldStage.amount || 0) : base.amount };
     });
     const fresh = applyPaymentHistoryToSchedule(wedding, freshBase);
     setWeddings((list) => list.map((w) => String(w.id) === String(wedding.id) ? { ...w, paymentSchedule: fresh } : w));
@@ -1906,6 +1937,8 @@ export default function Page() {
           onDeletePayment={(paymentId) => deletePayment(selectedWedding.id, paymentId)}
           onUpdatePaymentStage={(stageKey, patch) => updatePaymentScheduleItem(selectedWedding.id, stageKey, patch)}
           onTogglePaymentStage={(stage) => togglePaymentScheduleItem(selectedWedding, stage)}
+          onUploadStageProof={(stageKey,file) => uploadStagePaymentProof(selectedWedding, stageKey, file)}
+          documentBusy={documentBusy}
           onResetPaymentSchedule={() => resetPaymentSchedule(selectedWedding)}
           onUpdateChecklist={(key,value) => updateWeddingChecklist(selectedWedding.id,key,value)}
           onWhatsApp={() => openWhatsApp(selectedWedding.whatsapp)}
@@ -2285,7 +2318,7 @@ function VendorCard({ vendor, readOnly=false, onWhatsApp, onEdit, onDelete }) {
   </article>;
 }
 
-function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onViewDocument, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onUpdateChecklist, onWhatsApp, onVendorWhatsApp }) {
+function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onViewDocument, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onUploadStageProof, documentBusy=false, onResetPaymentSchedule, onUpdateChecklist, onWhatsApp, onVendorWhatsApp }) {
   const f = financials(wedding);
   const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
   const scheduledPaid = schedule.reduce((sum, stage) => sum + (stage.paid ? Number(stage.amount || 0) : 0), 0);
@@ -2503,6 +2536,14 @@ function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=fal
         {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
           <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={stage.paid?"Sudah dibayar":"Belum dibayar"}>{stage.paid?<CheckCircle2 size={22}/>:<span/>}</button>
           <div className="paymentStageMain"><b>{stage.label}</b><span>{stage.dueDate?`Jatuh tempo ${formatDate(stage.dueDate)}`:(stage.key==="dp1"?"Saat booking tanggal":"Tanggal dapat disesuaikan")}</span><em>{stage.paid?`Sudah dibayar${stage.paidDate?` · ${formatDate(stage.paidDate)}`:""}`:"Belum dibayar"}</em>{stage.dueDate&&!stage.paid&&Number(stage.amount||0)>0&&<i className={`stageReminder ${reminderStatus(stage).key}`}>{reminderStatus(stage).label}</i>}</div>
+          <div className="stageProofActions">
+            {stage.proofPath&&<button type="button" className="softButton compact" onClick={()=>onViewDocument(stage.proofPath)}>Lihat Bukti</button>}
+            {!readOnly&&<label className="softButton compact" style={{cursor:documentBusy?"wait":"pointer"}}>
+              {documentBusy?"Mengunggah...":stage.proofPath?"Ganti Bukti":"Upload Bukti"}
+              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={documentBusy} style={{display:"none"}}
+                onChange={(e)=>{const file=e.target.files?.[0]; if(file) onUploadStageProof(stage.key,file); e.target.value="";}}/>
+            </label>}
+          </div>
           <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<div className="paymentEditBox"><input type="text" inputMode="numeric" value={paymentDrafts[stage.key] ?? formatMoneyInput(stage.amount)} onChange={(e)=>setPaymentDrafts((current)=>({...current,[stage.key]:formatMoneyInput(parseMoney(e.target.value))}))} placeholder="0"/>{parseMoney(paymentDrafts[stage.key] ?? stage.amount)!==Number(stage.amount||0)&&<button className="saveStageButton" onClick={()=>savePaymentStageAmount(stage)}>Simpan</button>}</div>}</div>
         </div>)}
       </div>
