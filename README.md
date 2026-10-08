@@ -121,3 +121,13 @@ V4.23 - PWA / Add to Home Screen
 - Home financial summary cards remain 2 columns on phone screens.
 - Reduced card height, padding, label size, value size and supporting text for a cleaner mobile dashboard.
 - No calculation or data logic changes.
+
+## V4.38 — Dokumen klien privat
+- Form Wedding Baru/Edit: lampirkan KTP JPG/PNG/WEBP/PDF, 5 MB maksimal; akses via signed URL 60 detik.
+- Pembayaran Klien: lampirkan bukti transfer pada setiap cicilan tambahan; edit dapat mengganti lampiran.
+- Hapus Wedding: konfirmasi + tulis ke Supabase terlebih dahulu, lalu bersihkan lampiran terkait.
+- Jalankan `supabase/V4.38-private-documents.sql` **sekali** lewat Supabase SQL editor *sebelum* upload pertama, sesudah meninjau policy yang sudah ada. Bucket tidak pernah public.
+- Akses dokumen hanya member aktif role owner/admin pada workspace terkait.
+- Catatan: bukti transfer di jadwal DP otomatis belum memiliki form lampiran; gunakan menu Catat Pembayaran untuk unggah bukti.
+- Jika upload lama diganti, berkas yang digantikan bisa tertinggal di Storage dan perlu dibersihkan manual; jangan tampilkan bucket secara publik.
+- Perubahan belum di-deploy ke production. Uji di preview dahulu, termasuk hak akses role staff.

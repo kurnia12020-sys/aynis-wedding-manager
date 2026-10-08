@@ -40,6 +40,28 @@ import {
 
 import { supabase, supabaseConfigured } from "../lib/cloud";
 
+const PRIVATE_BUCKET = "wedding-documents";
+const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+function validateDocument(file) {
+  if (!file) return;
+  if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.type)) throw new Error("Gunakan JPG, PNG, WEBP, atau PDF.");
+  if (file.size > MAX_DOCUMENT_BYTES) throw new Error("Ukuran dokumen maksimal 5 MB.");
+}
+async function uploadPrivateDocument(file, workspaceId, weddingId, category) {
+  validateDocument(file);
+  if (!supabase || !workspaceId) throw new Error("Hubungkan aplikasi ke Supabase sebelum upload dokumen.");
+  const extension = ({"image/jpeg":"jpg","image/png":"png","image/webp":"webp","application/pdf":"pdf"})[file.type];
+  const path = `${workspaceId}/${weddingId}/${category}/${crypto.randomUUID()}.${extension}`;
+  const {error} = await supabase.storage.from(PRIVATE_BUCKET).upload(path, file, {contentType:file.type, upsert:false});
+  if (error) throw new Error(`Gagal upload dokumen: ${error.message}. Pastikan bucket privat wedding-documents dan policies sudah dibuat.`);
+  return path;
+}
+async function viewPrivateDocument(path) {
+  if (!path || !supabase) return;
+  const {data,error} = await supabase.storage.from(PRIVATE_BUCKET).createSignedUrl(path, 60);
+  if (error) return alert(`Gagal membuka dokumen: ${error.message}`);
+  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
 const WEDDING_KEY = "aynis-finance-flow-weddings-v3";
 const VENDOR_KEY = "aynis-finance-flow-vendors-v3";
 const PACKAGE_KEY = "aynis-finance-flow-packages-v1";
@@ -55,6 +77,7 @@ const emptyWedding = {
   discount: "",
   initialPayment: "",
   notes: "",
+  ktpPath: "",
   packageItems: [],
   addOns: [],
 };
@@ -515,6 +538,8 @@ export default function Page() {
 
   const [weddingOpen, setWeddingOpen] = useState(false);
   const [weddingForm, setWeddingForm] = useState(emptyWedding);
+  const [ktpFile, setKtpFile] = useState(null);
+  const [documentBusy, setDocumentBusy] = useState(false);
   const [waImportMode, setWaImportMode] = useState(false);
   const [waImportFiles, setWaImportFiles] = useState([]);
   const [waImportPreviews, setWaImportPreviews] = useState([]);
@@ -529,6 +554,7 @@ export default function Page() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentNote, setPaymentNote] = useState("");
+  const [paymentProofFile, setPaymentProofFile] = useState(null);
 
   const [vendorPaymentOpen, setVendorPaymentOpen] = useState(false);
   const [vendorPaymentWeddingId, setVendorPaymentWeddingId] = useState(null);
@@ -955,10 +981,12 @@ export default function Page() {
     resetWaImport();
     setWaImportMode(false);
     setWeddingForm(emptyWedding);
+    setKtpFile(null);
     setWeddingOpen(true);
   }
 
   function openEditWedding(wedding) {
+    setKtpFile(null);
     resetWaImport();
     setWaImportMode(false);
     setWeddingForm({
@@ -972,6 +1000,7 @@ export default function Page() {
       discount: String(wedding.discount ?? ""),
       initialPayment: "",
       notes: wedding.notes || "",
+      ktpPath: wedding.ktpPath || "",
       packageItems: (wedding.packageItems || []).map((item) => ({
         ...item,
         vendorId: item.vendorId ? String(item.vendorId) : "",
@@ -1094,6 +1123,7 @@ export default function Page() {
       dealPrice,
       discount,
       notes: weddingForm.notes.trim(),
+      ktpPath: old?.ktpPath || "",
       completed: old?.completed || false,
       payments: old?.payments || [],
       paymentSchedule: defaultPaymentSchedule({ dealPrice, discount, date: weddingForm.date, addOns: old?.addOns || [] }, old?.paymentSchedule),
@@ -1113,6 +1143,11 @@ export default function Page() {
       record.paymentSchedule = recalculateFollowingPayments(record, record.paymentSchedule, "dp1");
     }
 
+    if (ktpFile) {
+      if (!cloudReady || !workspaceId || !canEditData) throw new Error("Upload KTP memerlukan koneksi cloud dan izin edit.");
+      setDocumentBusy(true);
+      record.ktpPath = await uploadPrivateDocument(ktpFile, workspaceId, record.id, "ktp");
+    }
     let nextWeddings = null;
     if (cloudReady && workspaceId && supabase && (membership?.role === "owner" || membership?.role === "admin")) {
       setCloudState("saving");
@@ -1149,11 +1184,12 @@ export default function Page() {
     setYear(selected.getFullYear());
     setWeddingOpen(false);
     setWeddingForm(emptyWedding);
+    setKtpFile(null);
     setSelectedWeddingId(record.id);
     setTab("Wedding");
     } catch (error) {
       alert(error.message || "Data wedding belum lengkap.");
-    }
+    } finally { setDocumentBusy(false); }
   }
 
   function addWeddingDraftItem() {
@@ -1210,10 +1246,27 @@ export default function Page() {
     }));
   }
 
-  function deleteWedding(id) {
-    if (!confirm("Hapus wedding ini beserta pembayaran dan isi paketnya?")) return;
-    setWeddings((current) => current.filter((w) => w.id !== id));
-    if (String(selectedWeddingId) === String(id)) setSelectedWeddingId(null);
+  async function deleteWedding(id) {
+    if (!canEditData) return;
+    const existing = weddings.find(w => String(w.id) === String(id));
+    if (!existing || !confirm(`HAPUS PERMANEN wedding ${existing.couple} beserta catatan pembayaran, vendor terkait wedding, dan dokumennya? Tindakan ini tidak dapat dibatalkan.`)) return;
+    if (!cloudReady || !workspaceId || !supabase) return alert("Penghapusan membutuhkan koneksi Supabase. Data belum dihapus.");
+    setDocumentBusy(true);
+    try {
+      const {data,error} = await supabase.from("app_state").select("weddings").eq("workspace_id",workspaceId).single();
+      if (error) throw error;
+      const updated = (data.weddings || []).filter(w => String(w.id) !== String(id));
+      const {error:saveError} = await supabase.from("app_state").update({weddings:updated,updated_at:new Date().toISOString()}).eq("workspace_id",workspaceId);
+      if (saveError) throw saveError;
+      setWeddings(updated);
+      if (String(selectedWeddingId) === String(id)) setSelectedWeddingId(null);
+      const paths = [existing.ktpPath, ...(existing.payments||[]).map(x => x.proofPath)].filter(Boolean);
+      if (paths.length) {
+        const {error:storageError} = await supabase.storage.from(PRIVATE_BUCKET).remove(paths);
+        if (storageError) alert("Data wedding telah dihapus, tetapi sebagian lampiran perlu dibersihkan manual: " + storageError.message);
+      }
+    } catch (error) { alert("Gagal menghapus wedding. Data tidak sengaja dihapus dari tampilan: " + error.message); }
+    finally { setDocumentBusy(false); }
   }
 
   function openPayment(wedding, payment = null) {
@@ -1223,10 +1276,11 @@ export default function Page() {
     setPaymentAmount(payment ? String(payment.amount ?? "") : "");
     setPaymentDate(payment?.date || new Date().toISOString().slice(0, 10));
     setPaymentNote(payment?.notes || "");
+    setPaymentProofFile(null);
     setPaymentOpen(true);
   }
 
-  function savePayment(event) {
+  async function savePayment(event) {
     event.preventDefault();
     const wedding = weddings.find((w) => String(w.id) === String(paymentWeddingId));
     if (!wedding) return;
@@ -1246,7 +1300,16 @@ export default function Page() {
       amount,
       date: paymentDate,
       notes: paymentNote.trim(),
+      proofPath: editing?.proofPath || "",
     };
+    if (paymentProofFile) {
+      try {
+        if (!cloudReady || !workspaceId || !canEditData) throw new Error("Upload bukti pembayaran memerlukan cloud aktif.");
+        setDocumentBusy(true);
+        record.proofPath = await uploadPrivateDocument(paymentProofFile, workspaceId, wedding.id, `payment-${record.id}`);
+      } catch(error) { setDocumentBusy(false); return alert(error.message); }
+      finally { setDocumentBusy(false); }
+    }
 
     setWeddings((current) => current.map((w) => {
       if (String(w.id) !== String(paymentWeddingId)) return w;
@@ -1257,6 +1320,7 @@ export default function Page() {
       const schedule = defaultPaymentSchedule(nextWedding, w.paymentSchedule);
       return { ...nextWedding, paymentSchedule: applyPaymentHistoryToSchedule(nextWedding, schedule) };
     }));
+    setPaymentProofFile(null);
     setPaymentOpen(false);
   }
 
@@ -1828,6 +1892,7 @@ export default function Page() {
           onDelete={() => deleteWedding(selectedWedding.id)}
           onPay={() => openPayment(selectedWedding)}
           onEditPayment={(payment) => openPayment(selectedWedding, payment)}
+          onViewDocument={viewPrivateDocument}
           onToggleComplete={() => toggleWeddingComplete(selectedWedding)}
           onAddItem={() => openNewPackageItem(selectedWedding)}
           onEditItem={(item) => openEditPackageItem(selectedWedding, item)}
@@ -2011,6 +2076,8 @@ export default function Page() {
                 <Field label="Tanggal Wedding"><input type="date" value={weddingForm.date} onChange={(e)=>setWeddingForm({...weddingForm,date:e.target.value})}/><em>Otomatis masuk Kalender.</em></Field>
               </div>
               <Field label="Lokasi"><input value={weddingForm.place} onChange={(e)=>setWeddingForm({...weddingForm,place:e.target.value})} placeholder="Gedung / alamat acara"/></Field>
+              <Field label="Foto KTP Klien (privat)"><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>{const file=e.target.files?.[0]||null; try {validateDocument(file);setKtpFile(file);}catch(err){alert(err.message);e.target.value="";}}}/><em>Maksimal 5 MB. Hanya owner/admin workspace yang diizinkan mengakses bucket privat.</em></Field>
+              {weddingForm.ktpPath&&<button type="button" className="softButton" onClick={()=>viewPrivateDocument(weddingForm.ktpPath)}>Lihat KTP Tersimpan</button>}
               <Field label="Catatan Pengantin / Acara"><textarea rows={3} value={weddingForm.notes} onChange={(e)=>setWeddingForm({...weddingForm,notes:e.target.value})} placeholder="Jam akad, request klien, catatan khusus, dll."/></Field>
             </section>
 
@@ -2065,8 +2132,9 @@ export default function Page() {
               <Field label="Nominal Masuk"><input type="text" inputMode="numeric" value={formatMoneyInput(paymentAmount)} onChange={(e)=>setPaymentAmount(onlyDigits(e.target.value))} placeholder="2.000.000"/>{paymentAmount&&<em>{rp(paymentAmount)}</em>}</Field>
               <Field label="Tanggal"><input type="date" value={paymentDate} onChange={(e)=>setPaymentDate(e.target.value)}/></Field>
             </div>
+            <Field label="Bukti transfer (privat)"><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e=>{const file=e.target.files?.[0]||null;try{validateDocument(file);setPaymentProofFile(file);}catch(err){alert(err.message);e.target.value="";}}}/><em>JPG, PNG, WEBP, atau PDF, maksimal 5 MB.</em></Field>
             <Field label="Catatan"><textarea rows={2} value={paymentNote} onChange={(e)=>setPaymentNote(e.target.value)} placeholder="Transfer BCA / cash / keterangan lain"/></Field>
-            <button className="primary full" type="submit"><Banknote size={18}/> {paymentEditId?"Simpan Perubahan":"Simpan Pembayaran"}</button>
+            <button className="primary full" type="submit" disabled={documentBusy}><Banknote size={18}/> {paymentEditId?"Simpan Perubahan":"Simpan Pembayaran"}</button>
           </form>
         </Modal>
       )}
@@ -2217,7 +2285,7 @@ function VendorCard({ vendor, readOnly=false, onWhatsApp, onEdit, onDelete }) {
   </article>;
 }
 
-function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onUpdateChecklist, onWhatsApp, onVendorWhatsApp }) {
+function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=false, onBack, onEdit, onDelete, onPay, onEditPayment, onViewDocument, onToggleComplete, onAddItem, onEditItem, onDeleteItem, onAddAddOn, onEditAddOn, onDeleteAddOn, onAddVendorPayment, onEditVendorPayment, onDeleteVendorPayment, onDeletePayment, onUpdatePaymentStage, onTogglePaymentStage, onResetPaymentSchedule, onUpdateChecklist, onWhatsApp, onVendorWhatsApp }) {
   const f = financials(wedding);
   const schedule = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
   const scheduledPaid = schedule.reduce((sum, stage) => sum + (stage.paid ? Number(stage.amount || 0) : 0), 0);
@@ -2439,7 +2507,7 @@ function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=fal
         </div>)}
       </div>
       <div className="paymentScheduleSummary"><div><small>Terbayar dari Jadwal</small><b>{rp(scheduledPaid)}</b></div><div><small>Total Uang Masuk</small><b>{rp(f.incoming)}</b></div><div><small>Sisa Tagihan</small><b>{rp(f.remaining)}</b></div></div>
-      <div className="legacyPayments"><div className="legacyTitle"><div><b>Riwayat Pembayaran / Cicilan Tambahan</b><span className="mutedBlock">Setiap cicilan yang masuk otomatis mengurangi sisa DP berikutnya.</span></div>{!readOnly&&f.remaining>0&&<button className="softButton compact" onClick={onPay}><Plus size={15}/> Tambah Cicilan</button>}</div>{(wedding.payments||[]).length===0?<Empty text="Belum ada cicilan atau catatan pembayaran tambahan."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div>}</div>
+      <div className="legacyPayments"><div className="legacyTitle"><div><b>Riwayat Pembayaran / Cicilan Tambahan</b><span className="mutedBlock">Setiap cicilan yang masuk otomatis mengurangi sisa DP berikutnya.</span></div>{!readOnly&&f.remaining>0&&<button className="softButton compact" onClick={onPay}><Plus size={15}/> Tambah Cicilan</button>}</div>{(wedding.payments||[]).length===0?<Empty text="Belum ada cicilan atau catatan pembayaran tambahan."/>:<div className="paymentList">{(wedding.payments||[]).map((p)=><div className="paymentRow" key={p.id}><div><b>{p.label||p.note||"Pembayaran Klien"}</b><span>{p.date?formatDate(p.date):""}{p.notes?` · ${p.notes}`:""}</span></div><strong>{rp(p.amount)}</strong>{p.proofPath&&<button className="softButton compact" onClick={()=>onViewDocument(p.proofPath)}>Lihat Bukti</button>}{!readOnly&&<div className="miniActions"><button onClick={()=>onEditPayment(p)}><Pencil size={14}/></button><button className="iconDanger" onClick={()=>onDeletePayment(p.id)}><Trash2 size={14}/></button></div>}</div>)}</div>}</div>
     </section>
 
     <section className="panel checklistPanel">
@@ -2458,6 +2526,7 @@ function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=fal
     </section>
 
     <section className="panel clientDocsPanel" id="client-documents">
+      {wedding.ktpPath&&<button className="softButton" onClick={()=>onViewDocument(wedding.ktpPath)}>Lihat KTP Klien (Privat)</button>}
       <div className="panelHeader compactHeader"><div><small>7 · DOKUMEN KLIEN</small><h2>Invoice & Kwitansi</h2><p>Dokumen hanya membaca data yang sudah ada dan tidak membuat transaksi baru pada pembukuan.</p></div></div>
       <div className="clientDocActions"><button className="primary" onClick={()=>openClientDocument("invoice")}><FileText size={17}/> Invoice Tagihan</button><button className="softButton" onClick={()=>openClientDocument("receipt")}><ReceiptText size={17}/> Kwitansi Pembayaran</button></div>
     </section>
