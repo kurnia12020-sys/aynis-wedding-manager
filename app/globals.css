@@ -391,3 +391,31 @@ nav button{font-size:9px}
   .stats .card,.statsSix .card{padding:11px 10px!important;min-height:90px}
   .stats .card strong,.statsSix .card strong{font-size:14px!important}
 }
+
+/* V4.40 — compact, mobile-first payment schedule. Preserve editable amounts and dates. */
+.compactScheduleV440{gap:9px;margin-top:12px}
+.paymentStage.paymentStageCompact{display:flex;flex-direction:column;align-items:stretch;gap:9px;padding:12px 13px;border-radius:14px}
+.stageCompactHeading{display:flex;align-items:center;gap:8px;min-width:0}
+.stageCompactHeading .payCheck{height:27px;width:27px;flex:0 0 27px;border-width:1.5px}
+.stageCompactHeading .payCheck span{height:9px;width:9px}
+.stageCompactHeading>b{font-size:13px;line-height:1.25;min-width:0;flex:1}
+.stageCompactStatus{font-size:10px;white-space:nowrap;color:#836f66;background:#f4eeea;border-radius:15px;padding:4px 7px}
+.stageCompactStatus.isPaid{background:#e7f3e9;color:#42744c}
+.stageCompactInfo{display:grid;grid-template-columns:minmax(0,1fr) minmax(130px,45%);align-items:center;gap:10px}
+.stageCompactDates{display:flex;flex-direction:column;gap:4px;font-size:10px;color:#806f67;line-height:1.4}
+.stageCompactDates strong{font-weight:700;color:#67524e}
+.stageCompactDates .stageReminder{align-self:flex-start;font-size:10px;margin:0;padding:3px 7px}
+.paymentStageCompact .paymentStageAmount small{font-size:9px;margin-bottom:3px}
+.paymentStageCompact .paymentStageAmount input{padding:7px 9px;min-height:36px;font-size:14px;border-radius:9px}
+.paymentStageCompact .paymentEditBox{gap:4px}
+.paymentStageCompact .saveStageButton{font-size:10px;padding:7px;border-radius:8px}
+.stageCompactActions{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;padding-top:7px;border-top:1px solid #eee5e0}
+.paymentStageCompact .stageProofActions{display:flex;justify-content:flex-end;gap:5px;flex-wrap:wrap}
+.paymentStageCompact .stageProofActions .softButton{padding:7px 9px;font-size:10px;border-radius:9px;min-height:30px}
+.stageDateDisclosure{position:relative;min-width:0}
+.stageDateDisclosure summary{display:inline-flex;align-items:center;gap:4px;cursor:pointer;list-style:none;padding:7px 2px;font-size:10px;color:#87656c;font-weight:700;white-space:nowrap}
+.stageDateDisclosure summary::-webkit-details-marker{display:none}
+.stageDateFields{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}
+.stageDateFields label{display:grid;gap:4px;font-size:10px;color:#755c57;font-weight:600}
+.stageDateFields input{min-width:0;max-width:175px;width:145px;padding:7px;border:1px solid #e4d4cb;border-radius:8px;background:#fff;color:#493733;font-size:12px}
+@media(max-width:420px){.paymentStage.paymentStageCompact{padding:10px}.stageCompactInfo{grid-template-columns:minmax(0,1fr) minmax(118px,44%)}.stageCompactHeading>b{font-size:12px}.stageCompactStatus{font-size:9px}.stageDateFields input{width:130px}}

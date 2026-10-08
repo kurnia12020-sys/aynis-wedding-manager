@@ -1,3 +1,7 @@
+# V4.40 — Compact Payment Schedule
+
+Berbasis V4.39. Kartu DP1, DP2, DP3, dan Pelunasan dibuat ringkas untuk layar HP. Nominal tetap bisa diedit langsung (klik Simpan jika berubah). Tanggal jatuh tempo dan tanggal pembayaran bisa diedit melalui **Edit Tanggal** pada masing-masing tahap. Status bayar dan unggah/lihat/ganti bukti pembayaran tetap tersedia. Tanggal manual dipertahankan ketika data jadwal dihitung ulang.
+
 # AYNIS WEDDING MANAGER V4.39 — Bukti Pembayaran Per Tahap
 
 Pengembangan dari V4.38. Di **Detail Wedding → Jadwal & Riwayat Pembayaran**, setiap tahap (DP1, DP2, DP3, Pelunasan) memiliki tombol **Upload Bukti**, **Lihat Bukti**, dan **Ganti Bukti**. Bukti disimpan privat di bucket `wedding-documents` yang sudah dibuat di Supabase, dengan referensi tersimpan dalam `paymentSchedule` pada `app_state`. Mengunggah bukti **tidak otomatis menandai pembayaran lunas** dan tidak mengubah nominal. Centang status dibayar tetap secara manual. Penggantian bukti menghapus file lama setelah referensi baru sukses tersimpan.

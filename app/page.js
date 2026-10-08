@@ -325,7 +325,7 @@ function defaultPaymentSchedule(wedding, existing = null) {
     const saved = existing.find((item) => item.key === base.key || item.id === base.id);
     if (!saved) return base;
     const plannedAmount = saved.plannedAmount != null ? Number(saved.plannedAmount || 0) : Number(saved.amount ?? base.amount);
-    return { ...base, ...saved, plannedAmount, dueDate: ["dp3", "final"].includes(base.key) ? base.dueDate : (saved.dueDate || base.dueDate) };
+    return { ...base, ...saved, plannedAmount, dueDate: saved.dueDate !== undefined ? saved.dueDate : base.dueDate };
   });
 }
 
@@ -1397,7 +1397,7 @@ export default function Page() {
     const current = defaultPaymentSchedule(wedding, wedding.paymentSchedule);
     const freshBase = defaultPaymentSchedule(wedding, null).map((base) => {
       const oldStage = current.find((item) => item.key === base.key);
-      return { ...base, paid: Boolean(oldStage?.paid), paidDate: oldStage?.paidDate || "", proofPath: oldStage?.proofPath || "", amount: oldStage?.paid ? Number(oldStage.amount || 0) : base.amount };
+      return { ...base, paid: Boolean(oldStage?.paid), paidDate: oldStage?.paidDate || "", dueDate: oldStage?.dueDate !== undefined ? oldStage.dueDate : base.dueDate, proofPath: oldStage?.proofPath || "", amount: oldStage?.paid ? Number(oldStage.amount || 0) : base.amount };
     });
     const fresh = applyPaymentHistoryToSchedule(wedding, freshBase);
     setWeddings((list) => list.map((w) => String(w.id) === String(wedding.id) ? { ...w, paymentSchedule: fresh } : w));
@@ -2532,19 +2532,28 @@ function WeddingDetail({ wedding, vendors=[], readOnly=false, canViewFinance=fal
 
     <section className="panel" id="client-payment">
       <div className="panelHeader compactHeader"><div><small>5 · PEMBAYARAN KLIEN</small><h2>Jadwal & Riwayat Pembayaran</h2><p>Nominal mengikuti Total Tagihan (Deal Bersih + Add-on). DP manual dan setiap cicilan/catatan pembayaran masuk otomatis mengurangi sisa DP berikutnya sampai pelunasan.</p></div>{!readOnly&&<button className="softButton compact" onClick={onResetPaymentSchedule}>Hitung Ulang</button>}</div>
-      <div className="paymentScheduleList">
-        {schedule.map((stage)=><div className={`paymentStage ${stage.paid?"stagePaid":""}`} key={stage.key}>
-          <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={stage.paid?"Sudah dibayar":"Belum dibayar"}>{stage.paid?<CheckCircle2 size={22}/>:<span/>}</button>
-          <div className="paymentStageMain"><b>{stage.label}</b><span>{stage.dueDate?`Jatuh tempo ${formatDate(stage.dueDate)}`:(stage.key==="dp1"?"Saat booking tanggal":"Tanggal dapat disesuaikan")}</span><em>{stage.paid?`Sudah dibayar${stage.paidDate?` · ${formatDate(stage.paidDate)}`:""}`:"Belum dibayar"}</em>{stage.dueDate&&!stage.paid&&Number(stage.amount||0)>0&&<i className={`stageReminder ${reminderStatus(stage).key}`}>{reminderStatus(stage).label}</i>}</div>
-          <div className="stageProofActions">
-            {stage.proofPath&&<button type="button" className="softButton compact" onClick={()=>onViewDocument(stage.proofPath)}>Lihat Bukti</button>}
-            {!readOnly&&<label className="softButton compact" style={{cursor:documentBusy?"wait":"pointer"}}>
-              {documentBusy?"Mengunggah...":stage.proofPath?"Ganti Bukti":"Upload Bukti"}
-              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={documentBusy} style={{display:"none"}}
-                onChange={(e)=>{const file=e.target.files?.[0]; if(file) onUploadStageProof(stage.key,file); e.target.value="";}}/>
-            </label>}
+      <div className="paymentScheduleList compactScheduleV440">
+        {schedule.map((stage)=><div className={`paymentStage paymentStageCompact ${stage.paid?"stagePaid":""}`} key={stage.key}>
+          <div className="stageCompactHeading">
+            <button className={`payCheck ${stage.paid?"checked":""}`} disabled={readOnly} onClick={()=>!readOnly&&onTogglePaymentStage(stage)} aria-label={`${stage.label}: ${stage.paid?"Sudah dibayar, ketuk untuk membatalkan":"Belum dibayar, ketuk untuk menandai dibayar"}`}>{stage.paid?<CheckCircle2 size={19}/>:<span/>}</button>
+            <b>{stage.label}</b>
+            <span className={`stageCompactStatus ${stage.paid?"isPaid":""}`}>{stage.paid?"Sudah dibayar":"Belum dibayar"}</span>
           </div>
-          <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<div className="paymentEditBox"><input type="text" inputMode="numeric" value={paymentDrafts[stage.key] ?? formatMoneyInput(stage.amount)} onChange={(e)=>setPaymentDrafts((current)=>({...current,[stage.key]:formatMoneyInput(parseMoney(e.target.value))}))} placeholder="0"/>{parseMoney(paymentDrafts[stage.key] ?? stage.amount)!==Number(stage.amount||0)&&<button className="saveStageButton" onClick={()=>savePaymentStageAmount(stage)}>Simpan</button>}</div>}</div>
+          <div className="stageCompactInfo">
+            <div className="stageCompactDates">
+              <span>Jatuh tempo: <strong>{stage.dueDate?formatDate(stage.dueDate):"Belum diatur"}</strong></span>
+              {stage.paid&&<span>Dibayar: <strong>{stage.paidDate?formatDate(stage.paidDate):"Tanggal belum dicatat"}</strong></span>}
+              {stage.dueDate&&!stage.paid&&Number(stage.amount||0)>0&&<i className={`stageReminder ${reminderStatus(stage).key}`}>{reminderStatus(stage).label}</i>}
+            </div>
+            <div className="paymentStageAmount"><small>Nominal</small>{readOnly?<strong>{rp(stage.amount)}</strong>:<div className="paymentEditBox"><input aria-label={`Nominal ${stage.label}`} type="text" inputMode="numeric" value={paymentDrafts[stage.key] ?? formatMoneyInput(stage.amount)} onChange={(e)=>setPaymentDrafts((current)=>({...current,[stage.key]:formatMoneyInput(parseMoney(e.target.value))}))} placeholder="0"/>{parseMoney(paymentDrafts[stage.key] ?? stage.amount)!==Number(stage.amount||0)&&<button className="saveStageButton" onClick={()=>savePaymentStageAmount(stage)}>Simpan</button>}</div>}</div>
+          </div>
+          <div className="stageCompactActions">
+            {!readOnly&&<details className="stageDateDisclosure"><summary><CalendarDays size={14}/> Edit Tanggal</summary><div className="stageDateFields"><label>Jatuh tempo<input type="date" value={stage.dueDate||""} onChange={(e)=>onUpdatePaymentStage(stage.key,{dueDate:e.target.value})}/></label><label>Tanggal pembayaran<input type="date" value={stage.paidDate||""} onChange={(e)=>onUpdatePaymentStage(stage.key,{paidDate:e.target.value})}/></label></div></details>}
+            <div className="stageProofActions">
+              {stage.proofPath&&<button type="button" className="softButton compact" onClick={()=>onViewDocument(stage.proofPath)}>Lihat Bukti</button>}
+              {!readOnly&&<label className="softButton compact" style={{cursor:documentBusy?"wait":"pointer"}}>{documentBusy?"Mengunggah...":stage.proofPath?"Ganti Bukti":"Upload Bukti"}<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={documentBusy} style={{display:"none"}} onChange={(e)=>{const file=e.target.files?.[0];if(file) onUploadStageProof(stage.key,file);e.target.value="";}}/></label>}
+            </div>
+          </div>
         </div>)}
       </div>
       <div className="paymentScheduleSummary"><div><small>Terbayar dari Jadwal</small><b>{rp(scheduledPaid)}</b></div><div><small>Total Uang Masuk</small><b>{rp(f.incoming)}</b></div><div><small>Sisa Tagihan</small><b>{rp(f.remaining)}</b></div></div>
